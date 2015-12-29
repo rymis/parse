@@ -8,7 +8,14 @@ import (
 type tmp struct {
 	A string `regexp:"[hH]ello"`
 	_ string `regexp:","`
-	W *string `optional:"true" regexp:"[wW]orld"`
+	_ *string `set:"Set_w" optional:"true" regexp:"[wW]orld"`
+	w string
+}
+
+func (self *tmp) Set_w(v *string) error {
+	self.w = *v
+	fmt.Printf("SET: %s\n", self.w)
+	return nil
 }
 
 /* Simple arithmetic expressions grammar:

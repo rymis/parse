@@ -7,6 +7,8 @@ import (
 	"errors"
 	"regexp"
 	"bytes"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Parse error representation. Here str is original string, location - location of error in source string, message is error message.
@@ -45,28 +47,42 @@ func (self Error) Error() string {
 	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.message, self.str[start:i])
 }
 
-type context struct {
+// Parse context. It is structure containing information useful while parsing processes.
+type Context struct {
 	str []byte
 	skip_ws_f func (str []byte, loc int) int
 }
 
-func (ctx *context) parse_regexp(location int, rx string) (string, int, error) {
+// Create new parse.Error:
+func (ctx *Context) NewError(location int, msg string, args... interface{}) error {
+	var s string
+
+	if len(args) == 0 {
+		s = msg
+	} else {
+		s = fmt.Sprintf(msg, args...)
+	}
+
+	return Error{ctx.str, location, s}
+}
+
+func (ctx *Context) parse_regexp(location int, rx string) (string, int, error) {
 	r := regexp.MustCompile(rx)
 	m := r.Find(ctx.str[location:])
 	if m == nil {
-		return "", location, Error{ctx.str, location, "Waiting for '" + rx + "'"}
+		return "", location, ctx.NewError(location, "Waiting for /%s/", rx)
 	}
 
 	// It is must be at start:
 	if bytes.Compare(m, ctx.str[location: location + len(m)]) != 0 {
-		return "", location, Error{ctx.str, location, "Waiting for '" + rx + "'"}
+		return "", location, ctx.NewError(location, "Waiting for /%s/", rx)
 	}
 
 	return string(m), location + len(m), nil
 }
 
 // Skip whitespace:
-func (ctx *context) skip_ws(loc int) int {
+func (ctx *Context) skip_ws(loc int) int {
 	l := ctx.skip_ws_f(ctx.str, loc)
 	if l >= loc {
 		return l
@@ -74,8 +90,90 @@ func (ctx *context) skip_ws(loc int) int {
 	return loc
 }
 
+func (ctx *Context) parse_field(value_of reflect.Value, idx int, location int) (new_loc int, err error) {
+	type_of := value_of.Type()
+	f_type := type_of.Field(idx)
+
+	if f_type.Tag.Get("skip") == "true" {
+		// Skip this field
+		return location, nil
+	}
+
+	var f reflect.Value
+	if f_type.Name != "_" {
+		r, l := utf8.DecodeRuneInString(f_type.Name)
+		if l == 0 || !unicode.IsUpper(r) { // Private field
+			return location, nil
+		}
+
+		f = value_of.Field(idx)
+	} else {
+		f = reflect.New(f_type.Type).Elem()
+	}
+
+	if !f.CanSet() {
+		return location, errors.New(fmt.Sprintf("Can't set field '%v.%s'", type_of, f_type.Name))
+	}
+
+	not_any := f_type.Tag.Get("not_any") == "true"
+	followed_by := f_type.Tag.Get("followed_by") == "true"
+
+	var l int
+	l, err = ctx.parse_int(f, f_type.Tag, location)
+
+	if not_any {
+		if err == nil {
+			return location, Error{ctx.str, location, "Unexpected input"}
+		}
+
+		// Don't change the location
+		return location, nil
+	} else if followed_by {
+		if err != nil {
+			return l, err
+		}
+		// Don't change the location
+		return location, nil
+	} else {
+		if err != nil {
+			return l, err
+		}
+
+		set := f_type.Tag.Get("set")
+		if set != "" {
+			method := value_of.MethodByName(set)
+			if !method.IsValid() && value_of.CanAddr() {
+				method = value_of.Addr().MethodByName(set)
+			}
+
+			if !method.IsValid() {
+				return location, errors.New(fmt.Sprintf("Can't find `%s' method", set))
+			}
+
+			mtp := method.Type()
+			if mtp.NumIn() != 1 || mtp.NumOut() != 1 || mtp.In(0) != f_type.Type /* || mtp.Out(0) != reflect.TypeOf(error(nil)) */ {
+				return location, errors.New(fmt.Sprintf("Invalid method `%s' signature. Waiting for func (%s) error", set, f.Type().Name()))
+			}
+
+			resv := method.Call([]reflect.Value{f})[0]
+			if resv.IsNil() {
+				err = nil
+			} else {
+				err = resv.Interface().(error)
+			}
+
+			if err != nil {
+				return location, err
+			}
+		}
+
+		new_loc = ctx.skip_ws(l)
+		return
+	}
+}
+
 // Internal parse function
-func (ctx *context) parse_int(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
+func (ctx *Context) parse_int(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
 	type_of := value_of.Type()
 
 	location = ctx.skip_ws(location)
@@ -90,33 +188,12 @@ func (ctx *context) parse_int(value_of reflect.Value, tag reflect.StructTag, loc
 			return location, nil
 		}
 
-		first_of := false
-		followed_by := false
-		not_any := false
-
-		idx_start := 0
 		if type_of.Field(0).Type == reflect.TypeOf(FirstOf{}) {
-			first_of = true
-			idx_start = 1
-		}
+			max_error := Error{ ctx.str, location - 1, "No choices in first of" }
+			var l int
+			for i := 1; i < value_of.NumField(); i++ {
+				l, err = ctx.parse_field(value_of, i, location)
 
-		l := location
-		max_error := Error{ ctx.str, location - 1, "No choices in first of" }
-		for i := idx_start; i < value_of.NumField(); i++ {
-			f := value_of.Field(i)
-			not_any = (type_of.Field(i).Tag.Get("not_any") == "true")
-			followed_by = (type_of.Field(i).Tag.Get("followed_by") == "true")
-
-			if !f.CanSet() {
-				if type_of.Field(i).Name == "_" { // Ignorable value
-					f = reflect.New(type_of.Field(i).Type).Elem()
-				} else {
-					return location, errors.New(fmt.Sprintf("Can't set field '%v.%s'", type_of, type_of.Field(i).Name))
-				}
-			}
-
-			l, err = ctx.parse_int(f, type_of.Field(i).Tag, location)
-			if first_of {
 				if err == nil {
 					value_of.FieldByName("FirstOf").FieldByName("Field").SetString(type_of.Field(i).Name)
 					return l, nil
@@ -129,36 +206,23 @@ func (ctx *context) parse_int(value_of reflect.Value, tag reflect.StructTag, loc
 							max_error.message = err.message
 						}
 					default:
-						return location, err
-					}
-
-					if i == value_of.NumField() - 1 {
-						return location, max_error
-					}
-				}
-			} else {
-				if not_any {
-					if err == nil {
-						return location, Error{ctx.str, location, "Unexpected input"}
-					}
-					// Don't change the location
-				} else if followed_by {
-					if err != nil {
 						return l, err
 					}
-					// Don't change the location
-				} else {
-					if err != nil {
-						return l, err
-					}
-
-					location = ctx.skip_ws(l)
 				}
 			}
 
+			return location, max_error
+		} else {
+			for i := 0; i < value_of.NumField(); i++ {
+				location, err = ctx.parse_field(value_of, i, location)
+
+				if err != nil {
+					return location, err
+				}
+			}
 		}
 
-		return l, nil
+		return location, nil
 
 	case reflect.String:
 		rx := tag.Get("regexp")
@@ -258,7 +322,7 @@ func ParseFull(result interface{}, str []byte, ignore func ([]byte, int) int) (n
 		return -1, errors.New("Invalid argument for Parse: waiting for pointer")
 	}
 
-	ctx := context{ str, ignore }
+	ctx := Context{ str, ignore }
 	new_location, err = ctx.parse_int(value_of.Elem(), reflect.StructTag(""), 0)
 	return
 }
