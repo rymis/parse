@@ -45,7 +45,14 @@ func (self Error) Error() string {
 		}
 	}
 
-	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.message, self.str[start:i])
+	var s string
+	if len(self.str) > start + col - 1 {
+		s = string(self.str[start:start + col - 1]) + "<!--here--!>" + string(self.str[start + col - 1:i])
+	} else {
+		s = string(self.str[start:i])
+	}
+
+	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.message, s)
 }
 
 // Parse context. It is structure containing information useful while parsing processes.
@@ -174,7 +181,7 @@ func (ctx *Context) parse_unicode_value(location int) (rune, int, error) {
 				l = 8
 			}
 
-			if location + 4 >= len(ctx.str) {
+			if location + l >= len(ctx.str) {
 				return 0, location, ctx.NewError(location, "Unexpected end of file in escape sequence")
 			}
 
@@ -193,13 +200,17 @@ func (ctx *Context) parse_unicode_value(location int) (rune, int, error) {
 				}
 			}
 
+			if !utf8.ValidRune(r) {
+				return 0, location, ctx.NewError(location - 2, "Invalid rune")
+			}
+
 			return r, location + l, nil
 		} else {
 			return 0, location, ctx.NewError(location, "Invalid escaped char")
 		}
 	} else {
 		r, l := utf8.DecodeRune(ctx.str[location:])
-		if l == 0 {
+		if l <= 0 {
 			return 0, location, ctx.NewError(location, "Invalid Unicode character")
 		}
 
@@ -223,13 +234,6 @@ func (ctx *Context) parse_string(location int) (string, int, error) {
 		for location++; location < len(ctx.str); {
 			if ctx.str[location] == '`' { // End of string
 				return buf.String(), location + 1, nil
-			} else if ctx.str[location] == '\\' {
-				location++;
-				if location >= len(ctx.str) {
-					return "", location, ctx.NewError(location, "Unexpected end of file in string literal");
-				}
-				buf.WriteByte(ctx.str[location])
-				location++;
 			} else if (ctx.str[location] == '\r') { // Skip it
 				location++;
 			} else {
@@ -248,11 +252,16 @@ func (ctx *Context) parse_string(location int) (string, int, error) {
 				return "", l, err
 			}
 
-			if r >= 0x80 && l == 1 {
+			if r >= 0x80 && r <= 0xff && l - location == 4 { // TODO: make it better
 				buf.WriteByte(byte(r))
 			} else {
-				buf.WriteRune(r)
+				_, err = buf.WriteRune(r)
+				if err != nil {
+					return "", location, ctx.NewError(location, "Invalid Rune: %s", err.Error())
+				}
 			}
+
+			location = l
 		}
 	}
 
