@@ -196,7 +196,7 @@ func (ctx *Context) parse_unicode_value(location int) (rune, int, error) {
 				} else if (ctx.str[location + i] >= 'A' && ctx.str[location + i] <= 'F') {
 					r = r * 16 + rune(ctx.str[location + i] - 'A' + 10)
 				} else {
-					return 0, location, ctx.NewError(location, "Invalid character in octal_byte")
+					return 0, location, ctx.NewError(location, "Illegal character in hex code")
 				}
 			}
 

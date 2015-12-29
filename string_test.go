@@ -25,6 +25,9 @@ var tests []tst = []tst {
 	{ "\"\\u65e5\\u672c\\u8a9e\"", "日本語", true },                    // the explicit Unicode code points
 	{ "\"\\U000065e5\\U0000672c\\U00008a9e\"", "日本語", true },        // the explicit Unicode code points
 	{ "\"\\xe6\\x97\\xa5\\xe6\\x9c\\xac\\xe8\\xaa\\x9e\"", "日本語", true },  // the explicit UTF-8 bytes
+	{ "\"\\xzz\"", "", false },
+	{ "\"....", "", false },
+	{ "`.......", "", false },
 }
 
 func TestString(t *testing.T) {
