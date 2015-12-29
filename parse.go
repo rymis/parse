@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"errors"
 	"regexp"
-	"bytes"
 	"unicode"
 	"unicode/utf8"
+	"sync"
+	"bytes"
 )
 
 // Parse error representation. Here str is original string, location - location of error in source string, message is error message.
@@ -66,19 +67,196 @@ func (ctx *Context) NewError(location int, msg string, args... interface{}) erro
 	return Error{ctx.str, location, s}
 }
 
+var (
+	_compiled_map map[string]*regexp.Regexp
+	_compiled_mtx sync.Mutex
+)
+
+func compile_regexp(rx string) (*regexp.Regexp, error) {
+	_compiled_mtx.Lock()
+	defer _compiled_mtx.Unlock()
+
+	r, ok := _compiled_map[rx]
+	if ok {
+		return r, nil
+	}
+
+	r, err := regexp.Compile("^" + rx)
+	if err != nil {
+		_compiled_map[rx] = r
+	}
+
+	return r, err
+}
+
+// Parse regular expression and return result as string
 func (ctx *Context) parse_regexp(location int, rx string) (string, int, error) {
-	r := regexp.MustCompile(rx)
+	r, err := compile_regexp(rx)
+	if err != nil {
+		return "", location, err
+	}
+
 	m := r.Find(ctx.str[location:])
 	if m == nil {
 		return "", location, ctx.NewError(location, "Waiting for /%s/", rx)
 	}
 
-	// It is must be at start:
-	if bytes.Compare(m, ctx.str[location: location + len(m)]) != 0 {
-		return "", location, ctx.NewError(location, "Waiting for /%s/", rx)
+	return string(m), location + len(m), nil
+}
+
+// Parse Go unicode value:
+func (ctx *Context) parse_unicode_value(location int) (rune, int, error) {
+	/*
+	unicode_value    = unicode_char | little_u_value | big_u_value | escaped_char .
+	byte_value       = octal_byte_value | hex_byte_value .
+	octal_byte_value = `\` octal_digit octal_digit octal_digit .
+	hex_byte_value   = `\` "x" hex_digit hex_digit .
+	little_u_value   = `\` "u" hex_digit hex_digit hex_digit hex_digit .
+	big_u_value      = `\` "U" hex_digit hex_digit hex_digit hex_digit
+	                           hex_digit hex_digit hex_digit hex_digit .
+				   escaped_char     = `\` ( "a" | "b" | "f" | "n" | "r" | "t" | "v" | `\` | "'" | `"` ) .
+	*/
+	if location >= len(ctx.str) {
+		return 0, location, ctx.NewError(location, "Unexpected end of file: waiting for Unicode character")
 	}
 
-	return string(m), location + len(m), nil
+	if ctx.str[location] == '\\' {
+		location++
+		if location >= len(ctx.str) {
+			return 0, location, ctx.NewError(location, "Unexpected end of file in escape sequence")
+		}
+
+		if (ctx.str[location] == '\\') {
+			return '\\', location + 1, nil
+		} else if (ctx.str[location] == 'a') {
+			return '\a', location + 1, nil
+		} else if (ctx.str[location] == 'b') {
+			return '\b', location + 1, nil
+		} else if (ctx.str[location] == 'f') {
+			return '\f', location + 1, nil
+		} else if (ctx.str[location] == 'n') {
+			return '\n', location + 1, nil
+		} else if (ctx.str[location] == 'r') {
+			return '\r', location + 1, nil
+		} else if (ctx.str[location] == 't') {
+			return '\t', location + 1, nil
+		} else if (ctx.str[location] == 'v') {
+			return '\v', location + 1, nil
+		} else if (ctx.str[location] == '`') {
+			return '`', location + 1, nil
+		} else if (ctx.str[location] == '\'') {
+			return '\'', location + 1, nil
+		} else if (ctx.str[location] == '"') {
+			return '"', location + 1, nil
+		} else if (ctx.str[location] >= '0' && ctx.str[location] < 3) {
+			if location + 2 >= len(ctx.str) {
+				return 0, location, ctx.NewError(location, "Unexpected end of file in escape sequence")
+			}
+
+			var r rune = 0
+			for i := 0; i < 3; i++ {
+				if (ctx.str[location + i] >= '0' && ctx.str[location + i] <= '7') {
+					r = r * 8 + rune(ctx.str[location + i] - '0')
+				} else {
+					return 0, location, ctx.NewError(location, "Invalid character in octal_byte")
+				}
+			}
+
+			return r, location + 3, nil
+
+		} else if (ctx.str[location] == 'x' || ctx.str[location] == 'u' || ctx.str[location] == 'U') {
+			var l int
+			if ctx.str[location] == 'x' {
+				l = 2
+			} else if ctx.str[location] == 'u' {
+				l = 4
+			} else {
+				l = 8
+			}
+
+			if location + 4 >= len(ctx.str) {
+				return 0, location, ctx.NewError(location, "Unexpected end of file in escape sequence")
+			}
+
+			location++
+
+			var r rune = 0
+			for i := 0; i < l; i++ {
+				if (ctx.str[location + i] >= '0' && ctx.str[location + i] <= '9') {
+					r = r * 16 + rune(ctx.str[location + i] - '0')
+				} else if (ctx.str[location + i] >= 'a' && ctx.str[location + i] <= 'f') {
+					r = r * 16 + rune(ctx.str[location + i] - 'a' + 10)
+				} else if (ctx.str[location + i] >= 'A' && ctx.str[location + i] <= 'F') {
+					r = r * 16 + rune(ctx.str[location + i] - 'A' + 10)
+				} else {
+					return 0, location, ctx.NewError(location, "Invalid character in octal_byte")
+				}
+			}
+
+			return r, location + l, nil
+		} else {
+			return 0, location, ctx.NewError(location, "Invalid escaped char")
+		}
+	} else {
+		r, l := utf8.DecodeRune(ctx.str[location:])
+		if l == 0 {
+			return 0, location, ctx.NewError(location, "Invalid Unicode character")
+		}
+
+		return r, location + l, nil
+	}
+}
+
+// Parse Go string and return processed string:
+func (ctx *Context) parse_string(location int) (string, int, error) {
+	buf := bytes.NewBuffer(nil)
+	/* Grammar:
+	string_lit             = raw_string_lit | interpreted_string_lit .
+	raw_string_lit         = "`" { unicode_char | newline } "`" .
+	interpreted_string_lit = `"` { unicode_value | byte_value } `"` .
+
+	rune_lit         = "'" ( unicode_value | byte_value ) "'" .
+
+	*/
+
+	if ctx.str[location] == '`' { // raw string
+		for location++; location < len(ctx.str); {
+			if ctx.str[location] == '`' { // End of string
+				return buf.String(), location + 1, nil
+			} else if ctx.str[location] == '\\' {
+				location++;
+				if location >= len(ctx.str) {
+					return "", location, ctx.NewError(location, "Unexpected end of file in string literal");
+				}
+				buf.WriteByte(ctx.str[location])
+				location++;
+			} else if (ctx.str[location] == '\r') { // Skip it
+				location++;
+			} else {
+				buf.WriteByte(ctx.str[location])
+				location++;
+			}
+		}
+	} else if ctx.str[location] == '"' { // interpreted string
+		for location++; location < len(ctx.str); {
+			if ctx.str[location] == '"' {
+				return buf.String(), location + 1, nil
+			}
+
+			r, l, err := ctx.parse_unicode_value(location)
+			if err != nil {
+				return "", l, err
+			}
+
+			if r >= 0x80 && l == 1 {
+				buf.WriteByte(byte(r))
+			} else {
+				buf.WriteRune(r)
+			}
+		}
+	}
+
+	return "", location, ctx.NewError(location, "Waiting for Go string");
 }
 
 // Skip whitespace:
@@ -151,7 +329,7 @@ func (ctx *Context) parse_field(value_of reflect.Value, idx int, location int) (
 			}
 
 			mtp := method.Type()
-			if mtp.NumIn() != 1 || mtp.NumOut() != 1 || mtp.In(0) != f_type.Type /* || mtp.Out(0) != reflect.TypeOf(error(nil)) */ {
+			if mtp.NumIn() != 1 || mtp.NumOut() != 1 || mtp.In(0) != f_type.Type || mtp.Out(0).Name() != "error" {
 				return location, errors.New(fmt.Sprintf("Invalid method `%s' signature. Waiting for func (%s) error", set, f.Type().Name()))
 			}
 
@@ -225,15 +403,18 @@ func (ctx *Context) parse_int(value_of reflect.Value, tag reflect.StructTag, loc
 		return location, nil
 
 	case reflect.String:
+		var s string
 		rx := tag.Get("regexp")
 		if rx == "" {
-			return -1, errors.New(fmt.Sprintf("String fields must contain regular expression (tag is '%s')", string(tag)))
-		}
-
-		var s string
-		s, location, err = ctx.parse_regexp(location, rx)
-		if err != nil {
-			return location, err
+			s, location, err = ctx.parse_string(location)
+			if err != nil {
+				return location, err
+			}
+		} else {
+			s, location, err = ctx.parse_regexp(location, rx)
+			if err != nil {
+				return location, err
+			}
 		}
 
 		value_of.SetString(s)
