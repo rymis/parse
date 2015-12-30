@@ -55,10 +55,26 @@ func (self Error) Error() string {
 	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.message, s)
 }
 
+type packrat_key struct {
+	location int
+	t        reflect.Type
+	tag      reflect.StructTag
+}
+
+type packrat_value struct {
+	process  bool
+	v        reflect.Value
+	location int
+	err      error
+}
+
 // Parse context. It is structure containing information useful while parsing processes.
 type Context struct {
 	str []byte
 	skip_ws_f func (str []byte, loc int) int
+
+	packrat map[packrat_key]packrat_value
+	packrat_enabled bool
 }
 
 // Create new parse.Error:
@@ -475,6 +491,44 @@ func (ctx *Context) parse_field(value_of reflect.Value, idx int, location int) (
 
 // Internal parse function
 func (ctx *Context) parse_int(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
+	if !ctx.packrat_enabled {
+		return ctx.parse_raw(value_of, tag, location)
+	}
+
+	key := packrat_key{location, value_of.Type(), tag}
+	cache, ok := ctx.packrat[key]
+	if ok {
+		if cache.process {
+			return location, ctx.NewError(location, "Unrecoverable left recurtion in grammar")
+		}
+
+		if cache.err == nil {
+			value_of.Set(cache.v.Elem())
+		}
+
+		return cache.location, cache.err
+	}
+
+	var v packrat_value
+	v.process = true
+	ctx.packrat[key] = v
+
+	l, err := ctx.parse_raw(value_of, tag, location)
+	v.location = l
+	v.err = err
+	v.process = false
+	if err == nil {
+		v.v = reflect.New(key.t)
+		v.v.Elem().Set(value_of)
+	}
+
+	ctx.packrat[key] = v
+
+	return l, err
+}
+
+// Internal parse function without packrat:
+func (ctx *Context) parse_raw(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
 	type_of := value_of.Type()
 
 	location = ctx.skip_ws(location)
@@ -676,8 +730,39 @@ func ParseFull(result interface{}, str []byte, ignore func ([]byte, int) int) (n
 		return -1, errors.New("Invalid argument for Parse: waiting for pointer")
 	}
 
-	ctx := Context{ str, ignore }
+	var ctx Context
+	ctx.str = str
+	ctx.skip_ws_f = ignore
+	ctx.packrat = make(map[packrat_key]packrat_value)
+	ctx.packrat_enabled = true
 	new_location, err = ctx.parse_int(value_of.Elem(), reflect.StructTag(""), 0)
 	return
+}
+
+func New() *Context {
+	ctx := new(Context)
+	ctx.str = nil
+	ctx.skip_ws_f = skip_default
+	ctx.packrat_enabled = false
+
+	return ctx
+}
+
+func (ctx *Context) Parse(result interface{}, str []byte) (new_location int, err error) {
+	type_of := reflect.TypeOf(result)
+	value_of := reflect.ValueOf(result)
+
+	if type_of.Kind() != reflect.Ptr {
+		return -1, errors.New("Invalid argument for Parse: waiting for pointer")
+	}
+
+	ctx.str = str
+	ctx.packrat = make(map[packrat_key]packrat_value)
+
+	return ctx.parse_int(value_of.Elem(), reflect.StructTag(""), 0)
+}
+
+func (ctx *Context) SetIgnore(ignore func ([]byte, int) int) {
+	ctx.skip_ws_f = ignore
 }
 

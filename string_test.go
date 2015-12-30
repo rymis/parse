@@ -13,7 +13,7 @@ type tst struct {
 var tests []tst = []tst {
 	{ "`abc`", "abc", true },
 	{ "`\\n\n\\n`", "\\n\n\\n", true },
-	{ `"\\""`, "\"", true },
+	{ "\"\\\"\"", "\"", true },
 	{ `"Hello, world!\n"`, "Hello, world!\n", true },
 	{ `"日本語"`, "日本語", true },
 	{ "\"\\u65e5本\\U00008a9e\"", "\u65e5本\U00008a9e", true },
