@@ -36,7 +36,7 @@ type atom struct {
 	FirstOf
 
 	Expr braced_expression
-	Number string `regexp:"[1-9][0-9]*"`
+	Number int64
 }
 
 func (self atom) p() {

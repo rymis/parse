@@ -268,6 +268,120 @@ func (ctx *Context) parse_string(location int) (string, int, error) {
 	return "", location, ctx.NewError(location, "Waiting for Go string");
 }
 
+func (ctx *Context) check_uint_overflow(v uint64, location int, size uint) (uint64, int, error) {
+	if size == 8 {
+		return v, location, nil
+	}
+
+	if (v >> size) != 0 {
+		return 0, location, ctx.NewError(location, "Integer overflow (%d bits)", size)
+	}
+
+	return v, location, nil
+}
+
+func (ctx *Context) parse_uint64(location int, size uint) (uint64, int, error) {
+	if location >= len(ctx.str) {
+		return 0, location, ctx.NewError(location, "Unexpected end of file. Waiting for integer literal.")
+	}
+
+	var res uint64 = 0
+	if ctx.str[location] == '0' {
+		if location + 1 < len(ctx.str) && (ctx.str[location + 1] == 'x' || ctx.str[location + 1] == 'X') { // HEX
+			location += 2
+
+			if location >= len(ctx.str) {
+				return 0, location, ctx.NewError(location, "Unexpected end of file in hexadecimal literal.")
+			}
+
+			for ; location < len(ctx.str); location++ {
+				if (res & 0xf000000000000000) != 0 {
+					return 0, location, ctx.NewError(location, "Integer overflow")
+				}
+
+				if (ctx.str[location] >= '0') && (ctx.str[location] <= '9') {
+					res = (res << 4) + uint64(ctx.str[location] - '0')
+				} else if (ctx.str[location] >= 'a') && (ctx.str[location] <= 'f') {
+					res = (res << 4) + uint64(ctx.str[location] - 'a') + 10
+				} else if (ctx.str[location] >= 'A') && (ctx.str[location] <= 'F') {
+					res = (res << 4) + uint64(ctx.str[location] - 'A') + 10
+				} else {
+					break
+				}
+			}
+
+			return ctx.check_uint_overflow(res, location, size)
+		} else { // OCT
+			for ; location < len(ctx.str); location++ {
+				if (res & 0xe000000000000000) != 0 {
+					return 0, location, ctx.NewError(location, "Integer overflow")
+				}
+
+				if ctx.str[location] >= '0' && ctx.str[location] <= '7' {
+					res = (res << 3) + uint64(ctx.str[location] - '0')
+				} else {
+					break
+				}
+			}
+
+			return ctx.check_uint_overflow(res, location, size)
+		}
+	} else if ctx.str[location] > '0' && ctx.str[location] <= '9' {
+		var r8 uint64
+		for ; location < len(ctx.str); location++ {
+			if (res & 0xe000000000000000) != 0 {
+				return 0, location, ctx.NewError(location, "Integer overflow")
+			}
+
+			if ctx.str[location] >= '0' && ctx.str[location] <= '9' {
+				r8 = res << 3 // r8 = res * 8 Here could not be overflow: we have checked this before
+				res = r8 + (res << 1)
+				if res < r8 { // Overflow!
+					return 0, location, ctx.NewError(location, "Integer overflow")
+				}
+
+				res += uint64(ctx.str[location] - '0')
+			} else {
+				break
+			}
+		}
+
+		return ctx.check_uint_overflow(res, location, size)
+	}
+
+	return 0, location, ctx.NewError(location, "Waiting for integer literal")
+}
+
+func (ctx *Context) parse_int64(location int, size uint) (int64, int, error) {
+	neg := false
+	if location >= len(ctx.str) {
+		return 0, location, ctx.NewError(location, "Unexpected end of file. Waiting for integer.")
+	}
+
+	if ctx.str[location] == '-' {
+		neg = true
+		location++
+
+		/* TODO: allow spaces after '-'??? */
+	}
+
+	v, l, err := ctx.parse_uint64(location, size)
+	if err != nil {
+		return 0, location, err
+	}
+
+	if (v & 0x8000000000000000) != 0 {
+		return 0, location, ctx.NewError(location, "Integer overflow")
+	}
+
+	res := int64(v)
+	if neg {
+		res = -res
+	}
+
+	return res, l, nil
+}
+
 // Skip whitespace:
 func (ctx *Context) skip_ws(loc int) int {
 	l := ctx.skip_ws_f(ctx.str, loc)
@@ -428,6 +542,56 @@ func (ctx *Context) parse_int(value_of reflect.Value, tag reflect.StructTag, loc
 
 		value_of.SetString(s)
 
+		return location, nil
+
+	case reflect.Int32:
+		var r int32
+
+		if location >= len(ctx.str) {
+			return location, ctx.NewError(location, "Unexpected end of file: waiting for int32")
+		}
+
+		if ctx.str[location] == '\'' {
+			location++
+			r, location, err = ctx.parse_unicode_value(location)
+			if err != nil {
+				return location, err
+			}
+
+			if location >= len(ctx.str) || ctx.str[location] != '\'' {
+				return location, ctx.NewError(location, "Waiting for closing quote in unicode character")
+			}
+			location++
+		} else {
+			v, l, err := ctx.parse_int64(location, 32)
+			if err != nil {
+				return 0, err
+			}
+
+			location = l
+			r = int32(v)
+		}
+
+		value_of.SetInt(int64(r))
+
+		return location, nil
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int64:
+		r, l, err := ctx.parse_int64(location, uint(type_of.Bits()))
+		if err != nil {
+			return location, err
+		}
+		value_of.SetInt(r)
+		location = l
+		return location, nil
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		r, l, err := ctx.parse_uint64(location, uint(type_of.Bits()))
+		if err != nil {
+			return location, err
+		}
+		value_of.SetUint(r)
+		location = l
 		return location, nil
 
 	case reflect.Slice:
