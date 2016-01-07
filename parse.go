@@ -1,4 +1,6 @@
-// Easy to use PEG implementation with Go
+/*
+	Easy to use PEG implementation with Go.
+*/
 package parse
 
 import (
@@ -12,14 +14,16 @@ import (
 	"bytes"
 )
 
-// Parse error representation. Here str is original string, location - location of error in source string, message is error message.
+// Error is parse error representation.
+//
+// Here str is original string, location - location of error in source string, message is error message.
 type Error struct {
 	str []byte
 	location int
 	message string
 }
 
-// This is empty structure that indicates that we need to parse first expression of the fields of structure
+// FirstOf is empty structure that indicates that we need to parse first expression of the fields of structure
 type FirstOf struct {
 	// Name of parsed field
 	Field string
@@ -70,15 +74,19 @@ type packrat_value struct {
 
 // Parse context. It is structure containing information useful while parsing processes.
 type Context struct {
-	str []byte
 	skip_ws_f func (str []byte, loc int) int
-
-	packrat map[packrat_key]packrat_value
 	packrat_enabled bool
+	debug bool
+}
+
+type context struct {
+	Context
+	str []byte
+	packrat map[packrat_key]packrat_value
 }
 
 // Create new parse.Error:
-func (ctx *Context) NewError(location int, msg string, args... interface{}) error {
+func (ctx *context) NewError(location int, msg string, args... interface{}) error {
 	var s string
 
 	if len(args) == 0 {
@@ -113,7 +121,7 @@ func compile_regexp(rx string) (*regexp.Regexp, error) {
 }
 
 // Parse regular expression and return result as string
-func (ctx *Context) parse_regexp(location int, rx string) (string, int, error) {
+func (ctx *context) parse_regexp(location int, rx string) (string, int, error) {
 	r, err := compile_regexp(rx)
 	if err != nil {
 		return "", location, err
@@ -128,7 +136,7 @@ func (ctx *Context) parse_regexp(location int, rx string) (string, int, error) {
 }
 
 // Parse Go unicode value:
-func (ctx *Context) parse_unicode_value(location int) (rune, int, error) {
+func (ctx *context) parse_unicode_value(location int) (rune, int, error) {
 	/*
 	unicode_value    = unicode_char | little_u_value | big_u_value | escaped_char .
 	byte_value       = octal_byte_value | hex_byte_value .
@@ -235,7 +243,7 @@ func (ctx *Context) parse_unicode_value(location int) (rune, int, error) {
 }
 
 // Parse Go string and return processed string:
-func (ctx *Context) parse_string(location int) (string, int, error) {
+func (ctx *context) parse_string(location int) (string, int, error) {
 	buf := bytes.NewBuffer(nil)
 	/* Grammar:
 	string_lit             = raw_string_lit | interpreted_string_lit .
@@ -284,7 +292,7 @@ func (ctx *Context) parse_string(location int) (string, int, error) {
 	return "", location, ctx.NewError(location, "Waiting for Go string");
 }
 
-func (ctx *Context) check_uint_overflow(v uint64, location int, size uint) (uint64, int, error) {
+func (ctx *context) check_uint_overflow(v uint64, location int, size uint) (uint64, int, error) {
 	if size == 8 {
 		return v, location, nil
 	}
@@ -296,7 +304,7 @@ func (ctx *Context) check_uint_overflow(v uint64, location int, size uint) (uint
 	return v, location, nil
 }
 
-func (ctx *Context) parse_uint64(location int, size uint) (uint64, int, error) {
+func (ctx *context) parse_uint64(location int, size uint) (uint64, int, error) {
 	if location >= len(ctx.str) {
 		return 0, location, ctx.NewError(location, "Unexpected end of file. Waiting for integer literal.")
 	}
@@ -368,7 +376,7 @@ func (ctx *Context) parse_uint64(location int, size uint) (uint64, int, error) {
 	return 0, location, ctx.NewError(location, "Waiting for integer literal")
 }
 
-func (ctx *Context) parse_int64(location int, size uint) (int64, int, error) {
+func (ctx *context) parse_int64(location int, size uint) (int64, int, error) {
 	neg := false
 	if location >= len(ctx.str) {
 		return 0, location, ctx.NewError(location, "Unexpected end of file. Waiting for integer.")
@@ -399,7 +407,7 @@ func (ctx *Context) parse_int64(location int, size uint) (int64, int, error) {
 }
 
 // Skip whitespace:
-func (ctx *Context) skip_ws(loc int) int {
+func (ctx *context) skip_ws(loc int) int {
 	l := ctx.skip_ws_f(ctx.str, loc)
 	if l >= loc {
 		return l
@@ -407,7 +415,7 @@ func (ctx *Context) skip_ws(loc int) int {
 	return loc
 }
 
-func (ctx *Context) parse_field(value_of reflect.Value, idx int, location int) (new_loc int, err error) {
+func (ctx *context) parse_field(value_of reflect.Value, idx int, location int) (new_loc int, err error) {
 	type_of := value_of.Type()
 	f_type := type_of.Field(idx)
 
@@ -420,6 +428,10 @@ func (ctx *Context) parse_field(value_of reflect.Value, idx int, location int) (
 	if f_type.Name != "_" {
 		r, l := utf8.DecodeRuneInString(f_type.Name)
 		if l == 0 || !unicode.IsUpper(r) { // Private field
+			if ctx.debug {
+				fmt.Printf("\t[PRIVATE FIELD: %s]\n", f_type.Name)
+			}
+
 			return location, nil
 		}
 
@@ -434,6 +446,10 @@ func (ctx *Context) parse_field(value_of reflect.Value, idx int, location int) (
 
 	not_any := f_type.Tag.Get("not_any") == "true"
 	followed_by := f_type.Tag.Get("followed_by") == "true"
+
+	if ctx.debug {
+		fmt.Printf("\t[FIELD: %s] (not_any=%v, followed_by=%v)\n", f_type.Name, not_any, followed_by)
+	}
 
 	var l int
 	l, err = ctx.parse_int(f, f_type.Tag, location)
@@ -490,14 +506,26 @@ func (ctx *Context) parse_field(value_of reflect.Value, idx int, location int) (
 }
 
 // Internal parse function
-func (ctx *Context) parse_int(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
+func (ctx *context) parse_int(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
 	if !ctx.packrat_enabled {
-		return ctx.parse_raw(value_of, tag, location)
+		new_loc, err = ctx.parse_raw(value_of, tag, location)
+		if ctx.debug {
+			if err != nil {
+				fmt.Printf("ER [%d] {%s:%v} %v\n", location, value_of.Type(), tag, err)
+			} else {
+				fmt.Printf("OK [%d->%d] {%s:%v} %v\n", location, new_loc, value_of.Type(), tag, value_of.Interface())
+			}
+		}
+		return
 	}
 
 	key := packrat_key{location, value_of.Type(), tag}
 	cache, ok := ctx.packrat[key]
 	if ok {
+		if ctx.debug {
+			fmt.Printf("CACHE [%d] %v\n", location, cache)
+		}
+
 		if cache.process {
 			return location, ctx.NewError(location, "Unrecoverable left recurtion in grammar")
 		}
@@ -524,17 +552,21 @@ func (ctx *Context) parse_int(value_of reflect.Value, tag reflect.StructTag, loc
 
 	ctx.packrat[key] = v
 
+	if ctx.debug {
+		fmt.Printf("SET CACHE [%d] %v\n", location, v)
+	}
+
 	return l, err
 }
 
 // Internal parse function without packrat:
-func (ctx *Context) parse_raw(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
+func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
 	type_of := value_of.Type()
 
 	location = ctx.skip_ws(location)
 
 	if !value_of.CanSet() {
-		return -1, errors.New(fmt.Sprintf("Invalid argument for parse_int: can't set (%v: %v)", value_of, type_of))
+		return location, errors.New(fmt.Sprintf("Invalid argument for parse_int: can't set (%v: %v)", value_of, type_of))
 	}
 
 	switch value_of.Kind() {
@@ -723,25 +755,14 @@ func Parse(result interface{}, str []byte) (new_location int, err error) {
 }
 
 func ParseFull(result interface{}, str []byte, ignore func ([]byte, int) int) (new_location int, err error) {
-	type_of := reflect.TypeOf(result)
-	value_of := reflect.ValueOf(result)
-
-	if type_of.Kind() != reflect.Ptr {
-		return -1, errors.New("Invalid argument for Parse: waiting for pointer")
-	}
-
-	var ctx Context
-	ctx.str = str
-	ctx.skip_ws_f = ignore
-	ctx.packrat = make(map[packrat_key]packrat_value)
-	ctx.packrat_enabled = true
-	new_location, err = ctx.parse_int(value_of.Elem(), reflect.StructTag(""), 0)
+	ctx := new(Context)
+	ctx.SetIgnore(ignore)
+	new_location, err = ctx.Parse(result, str)
 	return
 }
 
 func New() *Context {
 	ctx := new(Context)
-	ctx.str = nil
 	ctx.skip_ws_f = skip_default
 	ctx.packrat_enabled = false
 
@@ -756,13 +777,25 @@ func (ctx *Context) Parse(result interface{}, str []byte) (new_location int, err
 		return -1, errors.New("Invalid argument for Parse: waiting for pointer")
 	}
 
-	ctx.str = str
-	ctx.packrat = make(map[packrat_key]packrat_value)
+	C := new(context)
+	C.Context = *ctx
+	C.str = str
+	C.packrat = make(map[packrat_key]packrat_value)
 
-	return ctx.parse_int(value_of.Elem(), reflect.StructTag(""), 0)
+	new_location, err =  C.parse_int(value_of.Elem(), reflect.StructTag(""), 0)
+
+	return
 }
 
 func (ctx *Context) SetIgnore(ignore func ([]byte, int) int) {
 	ctx.skip_ws_f = ignore
+}
+
+func (ctx *Context) SetPackrat(v bool) {
+	ctx.packrat_enabled = v
+}
+
+func (ctx *Context) SetDebug(v bool) {
+	ctx.debug = v
 }
 
