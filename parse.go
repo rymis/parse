@@ -52,15 +52,18 @@ import (
 )
 
 // Error is parse error representation.
-//
-// Here str is original string, location - location of error in source string, message is error message.
+// Error implements error interface. Error message contains message, position information and marked error line.
 type Error struct {
-	str []byte
-	location int
-	message string
+	// Original string
+	Str []byte
+	// Location of this erro in original string
+	Location int
+	// Error message
+	Message string
 }
 
-// FirstOf is empty structure that indicates that we need to parse first expression of the fields of structure
+// FirstOf is empty structure that indicates that we need to parse first expression of the fields of structure.
+// After pasring Field contains name of parsed field.
 type FirstOf struct {
 	// Name of parsed field
 	Field string
@@ -71,8 +74,8 @@ func (self Error) Error() string {
 	lineno := 1
 	col := 1
 	i := 0
-	for i = 0; i < len(self.str) - 1 && i < self.location; i++ {
-		if self.str[i] == '\n' {
+	for i = 0; i < len(self.Str) - 1 && i < self.Location; i++ {
+		if self.Str[i] == '\n' {
 			lineno++
 			start = i + 1
 			col = 1
@@ -80,46 +83,48 @@ func (self Error) Error() string {
 		col++
 	}
 
-	for ; i < len(self.str); i++ {
-		if self.str[i] == '\n' {
+	for ; i < len(self.Str); i++ {
+		if self.Str[i] == '\n' {
 			break
 		}
 	}
 
 	var s string
-	if len(self.str) > start + col - 1 {
-		s = string(self.str[start:start + col - 1]) + "<!--here--!>" + string(self.str[start + col - 1:i])
+	if len(self.Str) > start + col - 1 {
+		s = string(self.Str[start:start + col - 1]) + "<!--here--!>" + string(self.Str[start + col - 1:i])
 	} else {
-		s = string(self.str[start:i])
+		s = string(self.Str[start:i])
 	}
 
-	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.message, s)
+	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.Message, s)
 }
 
-type packrat_key struct {
+type packratKey struct {
 	location int
 	t        reflect.Type
 	tag      reflect.StructTag
 }
 
-type packrat_value struct {
+type packratValue struct {
 	process  bool
 	v        reflect.Value
 	location int
 	err      error
 }
 
-// Parse context. It is structure containing information useful while parsing processes.
+// Context is structure containing parameters of the parsing process.
+// You must use methods to control parameters: all the fields are private.
 type Context struct {
-	skip_ws_f func (str []byte, loc int) int
+	skipWhite func (str []byte, loc int) int
 	packrat_enabled bool
 	debug bool
 }
 
+// Private variant of context. Contains string and packrat table.
 type context struct {
 	Context
 	str []byte
-	packrat map[packrat_key]packrat_value
+	packrat map[packratKey]packratValue
 }
 
 // Create new parse.Error:
@@ -135,12 +140,14 @@ func (ctx *context) NewError(location int, msg string, args... interface{}) erro
 	return Error{ctx.str, location, s}
 }
 
+// Map of compiled regular expressions. I beleive that take value from map is faster operation then compile regular
+// expression in most cases.
 var (
 	_compiled_map map[string]*regexp.Regexp
 	_compiled_mtx sync.Mutex
 )
 
-func compile_regexp(rx string) (*regexp.Regexp, error) {
+func compileRegexp(rx string) (*regexp.Regexp, error) {
 	_compiled_mtx.Lock()
 	defer _compiled_mtx.Unlock()
 
@@ -158,8 +165,8 @@ func compile_regexp(rx string) (*regexp.Regexp, error) {
 }
 
 // Parse regular expression and return result as string
-func (ctx *context) parse_regexp(location int, rx string) (string, int, error) {
-	r, err := compile_regexp(rx)
+func (ctx *context) parseRegexp(location int, rx string) (string, int, error) {
+	r, err := compileRegexp(rx)
 	if err != nil {
 		return "", location, err
 	}
@@ -173,7 +180,7 @@ func (ctx *context) parse_regexp(location int, rx string) (string, int, error) {
 }
 
 // Parse Go unicode value:
-func (ctx *context) parse_unicode_value(location int) (rune, int, error) {
+func (ctx *context) parseUnicodeValue(location int) (rune, int, error) {
 	/*
 	unicode_value    = unicode_char | little_u_value | big_u_value | escaped_char .
 	byte_value       = octal_byte_value | hex_byte_value .
@@ -280,7 +287,7 @@ func (ctx *context) parse_unicode_value(location int) (rune, int, error) {
 }
 
 // Parse Go string and return processed string:
-func (ctx *context) parse_string(location int) (string, int, error) {
+func (ctx *context) parseString(location int) (string, int, error) {
 	buf := bytes.NewBuffer(nil)
 	/* Grammar:
 	string_lit             = raw_string_lit | interpreted_string_lit .
@@ -308,7 +315,7 @@ func (ctx *context) parse_string(location int) (string, int, error) {
 				return buf.String(), location + 1, nil
 			}
 
-			r, l, err := ctx.parse_unicode_value(location)
+			r, l, err := ctx.parseUnicodeValue(location)
 			if err != nil {
 				return "", l, err
 			}
@@ -341,7 +348,7 @@ func (ctx *context) check_uint_overflow(v uint64, location int, size uint) (uint
 	return v, location, nil
 }
 
-func (ctx *context) parse_uint64(location int, size uint) (uint64, int, error) {
+func (ctx *context) parseUint64(location int, size uint) (uint64, int, error) {
 	if location >= len(ctx.str) {
 		return 0, location, ctx.NewError(location, "Unexpected end of file. Waiting for integer literal.")
 	}
@@ -413,7 +420,7 @@ func (ctx *context) parse_uint64(location int, size uint) (uint64, int, error) {
 	return 0, location, ctx.NewError(location, "Waiting for integer literal")
 }
 
-func (ctx *context) parse_int64(location int, size uint) (int64, int, error) {
+func (ctx *context) parseInt64(location int, size uint) (int64, int, error) {
 	neg := false
 	if location >= len(ctx.str) {
 		return 0, location, ctx.NewError(location, "Unexpected end of file. Waiting for integer.")
@@ -426,7 +433,7 @@ func (ctx *context) parse_int64(location int, size uint) (int64, int, error) {
 		/* TODO: allow spaces after '-'??? */
 	}
 
-	v, l, err := ctx.parse_uint64(location, size)
+	v, l, err := ctx.parseUint64(location, size)
 	if err != nil {
 		return 0, location, err
 	}
@@ -444,15 +451,15 @@ func (ctx *context) parse_int64(location int, size uint) (int64, int, error) {
 }
 
 // Skip whitespace:
-func (ctx *context) skip_ws(loc int) int {
-	l := ctx.skip_ws_f(ctx.str, loc)
+func (ctx *context) skipWS(loc int) int {
+	l := ctx.skipWhite(ctx.str, loc)
 	if l >= loc {
 		return l
 	}
 	return loc
 }
 
-func (ctx *context) parse_field(value_of reflect.Value, idx int, location int) (new_loc int, err error) {
+func (ctx *context) parseField(value_of reflect.Value, idx int, location int) (new_loc int, err error) {
 	type_of := value_of.Type()
 	f_type := type_of.Field(idx)
 
@@ -489,7 +496,7 @@ func (ctx *context) parse_field(value_of reflect.Value, idx int, location int) (
 	}
 
 	var l int
-	l, err = ctx.parse_int(f, f_type.Tag, location)
+	l, err = ctx.parse(f, f_type.Tag, location)
 
 	if not_any {
 		if err == nil {
@@ -537,15 +544,15 @@ func (ctx *context) parse_field(value_of reflect.Value, idx int, location int) (
 			}
 		}
 
-		new_loc = ctx.skip_ws(l)
+		new_loc = ctx.skipWS(l)
 		return
 	}
 }
 
 // Internal parse function
-func (ctx *context) parse_int(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
+func (ctx *context) parse(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
 	if !ctx.packrat_enabled {
-		new_loc, err = ctx.parse_raw(value_of, tag, location)
+		new_loc, err = ctx.parseValue(value_of, tag, location)
 		if ctx.debug {
 			if err != nil {
 				fmt.Printf("ER [%d] {%s:%v} %v\n", location, value_of.Type(), tag, err)
@@ -556,7 +563,7 @@ func (ctx *context) parse_int(value_of reflect.Value, tag reflect.StructTag, loc
 		return
 	}
 
-	key := packrat_key{location, value_of.Type(), tag}
+	key := packratKey{location, value_of.Type(), tag}
 	cache, ok := ctx.packrat[key]
 	if ok {
 		if ctx.debug {
@@ -574,11 +581,11 @@ func (ctx *context) parse_int(value_of reflect.Value, tag reflect.StructTag, loc
 		return cache.location, cache.err
 	}
 
-	var v packrat_value
+	var v packratValue
 	v.process = true
 	ctx.packrat[key] = v
 
-	l, err := ctx.parse_raw(value_of, tag, location)
+	l, err := ctx.parseValue(value_of, tag, location)
 	v.location = l
 	v.err = err
 	v.process = false
@@ -597,13 +604,13 @@ func (ctx *context) parse_int(value_of reflect.Value, tag reflect.StructTag, loc
 }
 
 // Internal parse function without packrat:
-func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
+func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
 	type_of := value_of.Type()
 
-	location = ctx.skip_ws(location)
+	location = ctx.skipWS(location)
 
 	if !value_of.CanSet() {
-		return location, errors.New(fmt.Sprintf("Invalid argument for parse_int: can't set (%v: %v)", value_of, type_of))
+		return location, errors.New(fmt.Sprintf("Invalid argument for parse: can't set (%v: %v)", value_of, type_of))
 	}
 
 	switch value_of.Kind() {
@@ -616,7 +623,7 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 			max_error := Error{ ctx.str, location - 1, "No choices in first of" }
 			var l int
 			for i := 1; i < value_of.NumField(); i++ {
-				l, err = ctx.parse_field(value_of, i, location)
+				l, err = ctx.parseField(value_of, i, location)
 
 				if err == nil {
 					value_of.FieldByName("FirstOf").FieldByName("Field").SetString(type_of.Field(i).Name)
@@ -624,10 +631,10 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 				} else {
 					switch err := err.(type) {
 					case Error:
-						if err.location > max_error.location {
-							max_error.location = err.location
-							max_error.str = err.str
-							max_error.message = err.message
+						if err.Location > max_error.Location {
+							max_error.Location = err.Location
+							max_error.Str = err.Str
+							max_error.Message = err.Message
 						}
 					default:
 						return l, err
@@ -638,7 +645,7 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 			return location, max_error
 		} else {
 			for i := 0; i < value_of.NumField(); i++ {
-				location, err = ctx.parse_field(value_of, i, location)
+				location, err = ctx.parseField(value_of, i, location)
 
 				if err != nil {
 					return location, err
@@ -652,12 +659,12 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 		var s string
 		rx := tag.Get("regexp")
 		if rx == "" {
-			s, location, err = ctx.parse_string(location)
+			s, location, err = ctx.parseString(location)
 			if err != nil {
 				return location, err
 			}
 		} else {
-			s, location, err = ctx.parse_regexp(location, rx)
+			s, location, err = ctx.parseRegexp(location, rx)
 			if err != nil {
 				return location, err
 			}
@@ -676,7 +683,7 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 
 		if ctx.str[location] == '\'' {
 			location++
-			r, location, err = ctx.parse_unicode_value(location)
+			r, location, err = ctx.parseUnicodeValue(location)
 			if err != nil {
 				return location, err
 			}
@@ -686,7 +693,7 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 			}
 			location++
 		} else {
-			v, l, err := ctx.parse_int64(location, 32)
+			v, l, err := ctx.parseInt64(location, 32)
 			if err != nil {
 				return 0, err
 			}
@@ -700,7 +707,7 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 		return location, nil
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int64:
-		r, l, err := ctx.parse_int64(location, uint(type_of.Bits()))
+		r, l, err := ctx.parseInt64(location, uint(type_of.Bits()))
 		if err != nil {
 			return location, err
 		}
@@ -709,7 +716,7 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 		return location, nil
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		r, l, err := ctx.parse_uint64(location, uint(type_of.Bits()))
+		r, l, err := ctx.parseUint64(location, uint(type_of.Bits()))
 		if err != nil {
 			return location, err
 		}
@@ -733,7 +740,7 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 			v := reflect.New(tp)
 			var nl int
 
-			nl, err = ctx.parse_int(v.Elem(), tag, location)
+			nl, err = ctx.parse(v.Elem(), tag, location)
 			if err != nil {
 				if value_of.Len() >= min {
 					return location, nil
@@ -754,7 +761,7 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 		v := reflect.New(type_of.Elem())
 		var nl int
 
-		nl, err = ctx.parse_int(v.Elem(), tag, location)
+		nl, err = ctx.parse(v.Elem(), tag, location)
 		if err != nil {
 			switch err.(type) {
 			case Error:
@@ -777,7 +784,7 @@ func (ctx *context) parse_raw(value_of reflect.Value, tag reflect.StructTag, loc
 	return 0, nil
 }
 
-func skip_default(str []byte, loc int) int {
+func skipDefault(str []byte, loc int) int {
 	for i := loc; i < len(str); i++ {
 		if str[i] != ' ' && str[i] != '\t' && str[i] != '\n' && str[i] != '\r' {
 			return i
@@ -788,7 +795,7 @@ func skip_default(str []byte, loc int) int {
 }
 
 func Parse(result interface{}, str []byte) (new_location int, err error) {
-	return ParseFull(result, str, skip_default)
+	return ParseFull(result, str, skipDefault)
 }
 
 func ParseFull(result interface{}, str []byte, ignore func ([]byte, int) int) (new_location int, err error) {
@@ -800,7 +807,7 @@ func ParseFull(result interface{}, str []byte, ignore func ([]byte, int) int) (n
 
 func New() *Context {
 	ctx := new(Context)
-	ctx.skip_ws_f = skip_default
+	ctx.skipWhite = skipDefault
 	ctx.packrat_enabled = false
 
 	return ctx
@@ -817,15 +824,15 @@ func (ctx *Context) Parse(result interface{}, str []byte) (new_location int, err
 	C := new(context)
 	C.Context = *ctx
 	C.str = str
-	C.packrat = make(map[packrat_key]packrat_value)
+	C.packrat = make(map[packratKey]packratValue)
 
-	new_location, err =  C.parse_int(value_of.Elem(), reflect.StructTag(""), 0)
+	new_location, err =  C.parse(value_of.Elem(), reflect.StructTag(""), 0)
 
 	return
 }
 
 func (ctx *Context) SetIgnore(ignore func ([]byte, int) int) {
-	ctx.skip_ws_f = ignore
+	ctx.skipWhite = ignore
 }
 
 func (ctx *Context) SetPackrat(v bool) {
