@@ -1,5 +1,42 @@
 /*
-	Easy to use PEG implementation with Go.
+Easy to use PEG implementation with Go.
+
+This package contains PEG (Parsing Expressions Grammar) implementation that could be used with Go.
+This library is much different from another libraries because grammar mapped to Go types, so you don't need to use
+external grammar files nor use expressions to specify one like with pyparsing or Boost.Spirit.
+
+For example you can parse hello world using this structure:
+
+	type HelloWorld struct {
+		Hello string `regexp:"[hH]ello"`
+		_     string `regexp:","`
+		World string `regexp:"[a-zA-Z]+"`
+		_     string `regexp:"!?"`
+	}
+
+And the only thing you need to do is call Parse function:
+
+	var hello HelloWorld
+	new_location, err := parse.Parse(&hello, []byte("Hello, World!"))
+
+You can also specify whitespace skipping function (default is to skip all spaces, tabulations, new-lines and carier returns)
+packrat using, grammar debugging options et. cetera.
+
+One of the interesting features of this library is ability to parse Go base data types using Go grammar. For example you can
+simply parse int64 with Parse:
+
+	var i int64
+	new_location, err := parse.Parse(&i, []byte("123"))
+
+If you need to parse variant types you need to insert FirstOf as first field in your structure:
+
+	type StringOrInt struct {
+		FirstOf
+		Str     string
+		Int     int
+	}
+	new_location, err := parse.Parse(new(StringOrInt), `"I can parse Go string!"`)
+
 */
 package parse
 
