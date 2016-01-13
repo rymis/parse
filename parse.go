@@ -106,9 +106,17 @@ type packratKey struct {
 }
 
 type packratValue struct {
-	process  bool
-	v        reflect.Value
-	location int
+	// Set to true when result is actual in table
+	parsed    bool
+
+	// Recursion level
+	rec_l    int
+
+	// New location
+	new_loc  int
+	// Value
+	value    reflect.Value
+	// Error
 	err      error
 }
 
@@ -336,7 +344,7 @@ func (ctx *context) parseString(location int) (string, int, error) {
 	return "", location, ctx.NewError(location, "Waiting for Go string");
 }
 
-func (ctx *context) check_uint_overflow(v uint64, location int, size uint) (uint64, int, error) {
+func (ctx *context) checkUintOverflow(v uint64, location int, size uint) (uint64, int, error) {
 	if size == 8 {
 		return v, location, nil
 	}
@@ -378,7 +386,7 @@ func (ctx *context) parseUint64(location int, size uint) (uint64, int, error) {
 				}
 			}
 
-			return ctx.check_uint_overflow(res, location, size)
+			return ctx.checkUintOverflow(res, location, size)
 		} else { // OCT
 			for ; location < len(ctx.str); location++ {
 				if (res & 0xe000000000000000) != 0 {
@@ -392,7 +400,7 @@ func (ctx *context) parseUint64(location int, size uint) (uint64, int, error) {
 				}
 			}
 
-			return ctx.check_uint_overflow(res, location, size)
+			return ctx.checkUintOverflow(res, location, size)
 		}
 	} else if ctx.str[location] > '0' && ctx.str[location] <= '9' {
 		var r8 uint64
@@ -414,7 +422,7 @@ func (ctx *context) parseUint64(location int, size uint) (uint64, int, error) {
 			}
 		}
 
-		return ctx.check_uint_overflow(res, location, size)
+		return ctx.checkUintOverflow(res, location, size)
 	}
 
 	return 0, location, ctx.NewError(location, "Waiting for integer literal")
@@ -570,34 +578,88 @@ func (ctx *context) parse(value_of reflect.Value, tag reflect.StructTag, locatio
 			fmt.Printf("CACHE [%d] %v\n", location, cache)
 		}
 
-		if cache.process {
-			return location, ctx.NewError(location, "Unrecoverable left recurtion in grammar")
+		if cache.parsed { // Cached value
+			if cache.err == nil {
+				value_of.Set(cache.value.Elem())
+			}
+
+			return cache.new_loc, cache.err
 		}
 
-		if cache.err == nil {
-			value_of.Set(cache.v.Elem())
+		// Left recursion parsing in progress:
+		if cache.rec_l == 0 {
+			cache.new_loc = location
+			cache.err = ctx.NewError(location, "Waiting for %s", key.t.Name)
+			cache.value = reflect.New(key.t)
+			ctx.packrat[key] = cache
+
+			save_value := reflect.New(key.t)
+			save_loc   := location
+			var save_err error
+			// Save old and call recursive with nil:
+			for {
+				save_value.Elem().Set(cache.value.Elem())
+				save_loc = cache.new_loc
+				save_err = cache.err
+
+				cache.rec_l = 1
+				ctx.packrat[key] = cache
+				l, err := ctx.parseValue(value_of, tag, location)
+				if err != nil { // This step was not good
+					cache.parsed = true
+					cache.value.Elem().Set(save_value.Elem())
+					cache.new_loc = save_loc
+					cache.err = save_err
+					ctx.packrat[key] = cache
+					value_of.Set(save_value.Elem())
+
+					return save_loc, save_err
+				} else if l <= save_loc { // End of recursion
+					cache.parsed = true
+					cache.value.Elem().Set(value_of)
+					cache.new_loc = l
+					cache.err = nil
+					cache.rec_l = 0
+					ctx.packrat[key] = cache
+					return l, nil
+				}
+
+				cache.new_loc = l
+				cache.err = nil
+				cache.value.Elem().Set(value_of)
+				cache.rec_l = 1
+
+				ctx.packrat[key] = cache
+			}
+		} else if cache.rec_l == 1 {
+			cache.rec_l = 2
+			ctx.packrat[key] = cache
+
+			return ctx.parseValue(value_of, tag, location)
+		} else /* if cache.rec_l == 2 */ {
+			// We need to return fail:
+			return location, ctx.NewError(location, "Waiting for %s", key.t.Name)
 		}
 
-		return cache.location, cache.err
+		return location, ctx.NewError(location, "LR failed")
 	}
 
-	var v packratValue
-	v.process = true
-	ctx.packrat[key] = v
+	ctx.packrat[key] = packratValue{ parsed: false, rec_l: 0 }
 
 	l, err := ctx.parseValue(value_of, tag, location)
-	v.location = l
-	v.err = err
-	v.process = false
-	if err == nil {
-		v.v = reflect.New(key.t)
-		v.v.Elem().Set(value_of)
-	}
 
-	ctx.packrat[key] = v
+	cache = ctx.packrat[key]
+	cache.parsed = true
+	cache.err = err
+	if err == nil {
+		cache.value = reflect.New(key.t)
+		cache.value.Elem().Set(value_of)
+	}
+	cache.new_loc = l
+	ctx.packrat[key] = cache
 
 	if ctx.debug {
-		fmt.Printf("SET CACHE [%d] %v\n", location, v)
+		fmt.Printf("SET CACHE [%d] %v\n", location, cache)
 	}
 
 	return l, err

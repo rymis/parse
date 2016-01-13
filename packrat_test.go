@@ -40,7 +40,7 @@ type MUL struct {
 func print_mul(m *MUL) {
 	if m.Field == "Mul" {
 		if m.Mul.Arg != nil {
-			fmt.Printf("%s ", m.Mul.Arg.Op)
+			fmt.Printf("%s(", m.Mul.Arg.Op)
 			print_mul(&m.Mul.Mul)
 
 			if m.Mul.Arg.Atom.Field == "Val" {
@@ -48,6 +48,7 @@ func print_mul(m *MUL) {
 			} else {
 				print_expr(&m.Mul.Arg.Atom.Expr.Expr)
 			}
+			fmt.Print(")")
 		} else {
 			print_mul(&m.Mul.Mul)
 		}
@@ -77,9 +78,10 @@ type EXPR struct {
 func print_expr(e *EXPR) {
 	if e.Field == "Expr" {
 		if e.Expr.Arg != nil {
-			fmt.Printf("%s ", e.Expr.Arg.Op)
+			fmt.Printf("%s(", e.Expr.Arg.Op)
 			print_expr(&e.Expr.Expr)
 			print_mul(&e.Expr.Arg.Mul)
+			fmt.Print(")")
 		} else {
 			print_expr(&e.Expr.Expr)
 		}
