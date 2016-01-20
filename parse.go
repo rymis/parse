@@ -752,6 +752,7 @@ func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, lo
 		value_of.SetFloat(r)
 		location = l
 		return location, nil
+
 	/* TODO: complex numbers */
 
 	case reflect.Slice:
