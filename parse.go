@@ -1029,7 +1029,7 @@ func SkipOneLineComment(str []byte, loc int, begin string) int {
 }
 
 // Skip multiline comment that starts from begin and ends with end.
-// If you are allowing comments inside the comments recursive must be set to true.
+// If you are allowing nested comments recursive must be set to true.
 func SkipMultilineComment(str []byte, loc int, begin, end string, recursive bool) int {
 	if strAt(str, loc, begin) {
 		for i := loc + len(begin); i < len(str) - len(end); i++ {
@@ -1080,8 +1080,13 @@ func SkipAdaComment(str []byte, loc int) int {
 	return SkipOneLineComment(str, loc, "--")
 }
 
-// Skip .ini style comment: "; .... \n"
-func SkipIniComment(str []byte, loc int) int {
+// Skip Lisp style comment: "; .... \n"
+func SkipLispComment(str []byte, loc int) int {
+	return SkipOneLineComment(str, loc, ";")
+}
+
+// Skip TeX style comment: "% .... \n"
+func SkipTeXComment(str []byte, loc int) int {
 	return SkipOneLineComment(str, loc, ";")
 }
 
