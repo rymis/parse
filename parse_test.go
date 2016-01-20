@@ -145,7 +145,7 @@ func TestParse(t *testing.T) {
 
 	for _, s := range([]string{"aabbcc", "", "abc", "aabbc", "aabcc"}) {
 		var g abc_S
-		_, e = Parse(&g, []byte(s), nil)
+		_, e = Parse(&g, []byte(s), &Params{PackratEnabled: true})
 		fmt.Printf("EXPR: %s\n", s)
 		if e != nil {
 			fmt.Printf("ERROR: %s\n", e.Error())

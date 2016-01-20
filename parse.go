@@ -989,3 +989,121 @@ func NewParams() *Params {
 	return &Params{ SkipWhite: skipDefault }
 }
 
+// Skip spaces, tabulations and newlines:
+func SkipSpaces(str []byte, loc int) int {
+	for i := loc; i < len(str); i++ {
+		if str[i] != ' ' && str[i] != '\t' && str[i] != '\n' && str[i] != '\r' {
+			return i
+		}
+	}
+
+	return len(str)
+}
+
+func strAt(str []byte, loc int, s string) bool {
+	if loc + len(s) < len(str) {
+		for i := range(s) {
+			if str[loc + i] != s[i] {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// Skip one-line comment that starts from begin and ends with newline or end of string
+func SkipOneLineComment(str []byte, loc int, begin string) int {
+	if strAt(str, loc, begin) {
+		loc += len(begin)
+
+		for ; loc < len(str); loc++ {
+			if str[loc] == '\n' {
+				return loc + 1
+			}
+		}
+
+		return loc
+	}
+	return loc
+}
+
+// Skip multiline comment that starts from begin and ends with end.
+// If you are allowing comments inside the comments recursive must be set to true.
+func SkipMultilineComment(str []byte, loc int, begin, end string, recursive bool) int {
+	if strAt(str, loc, begin) {
+		for i := loc + len(begin); i < len(str) - len(end); i++ {
+			if strAt(str, i, end) {
+				return i + len(end)
+			}
+
+			if recursive && strAt(str, i, begin) {
+				j := SkipMultilineComment(str, i, begin, end, recursive)
+				if j == i { // Here was error
+					return loc
+				}
+				i = j - 1
+			}
+		}
+	}
+
+	return loc
+}
+
+// Skip shell style comment: "# .... \n"
+func SkipShellComment(str []byte, loc int) int {
+	return SkipOneLineComment(str, loc, "#")
+}
+
+// Skip C++ style comment: "// ..... \n"
+func SkipCPPComment(str []byte, loc int) int {
+	return SkipOneLineComment(str, loc, "//")
+}
+
+// Skip C style comment: "/* ..... */"
+func SkipCComment(str []byte, loc int) int {
+	return SkipMultilineComment(str, loc, "/*", "*/", false)
+}
+
+// Skip Pascal style comment: "(* ... *)"
+func SkipPascalComment(str []byte, loc int) int {
+	return SkipMultilineComment(str, loc, "(*", "*)", true)
+}
+
+// Skip HTML style comment: "<!-- ... -->"
+func SkipHTMLComment(str []byte, loc int) int {
+	return SkipMultilineComment(str, loc, "<!--", "-->", false)
+}
+
+// Skip Ada style comment: "-- .... \n"
+func SkipAdaComment(str []byte, loc int) int {
+	return SkipOneLineComment(str, loc, "--")
+}
+
+// Skip .ini style comment: "; .... \n"
+func SkipIniComment(str []byte, loc int) int {
+	return SkipOneLineComment(str, loc, ";")
+}
+
+// Skip any count of any substrings defined by skip functions.
+func SkipAll(str []byte, loc int, funcs... func ([]byte, int) int) int {
+	var l int
+	var skipped bool
+	for {
+		skipped = false
+		for _, f := range(funcs) {
+			l = f(str, loc)
+			if l > loc {
+				loc = l
+				skipped = true
+			}
+		}
+
+		if !skipped {
+			return loc
+		}
+	}
+
+	return loc
+}
+
