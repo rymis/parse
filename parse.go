@@ -17,7 +17,7 @@ For example you can parse hello world using this structure:
 And the only thing you need to do is call Parse function:
 
 	var hello HelloWorld
-	new_location, err := parse.Parse(&hello, []byte("Hello, World!"))
+	new_location, err := parse.Parse(&hello, []byte("Hello, World!"), nil)
 
 You can also specify whitespace skipping function (default is to skip all spaces, tabulations, new-lines and carier returns)
 packrat using, grammar debugging options et. cetera.
@@ -26,7 +26,7 @@ One of the interesting features of this library is ability to parse Go base data
 simply parse int64 with Parse:
 
 	var i int64
-	new_location, err := parse.Parse(&i, []byte("123"))
+	new_location, err := parse.Parse(&i, []byte("123"), nil)
 
 If you need to parse variant types you need to insert FirstOf as first field in your structure:
 
@@ -35,8 +35,9 @@ If you need to parse variant types you need to insert FirstOf as first field in 
 		Str     string
 		Int     int
 	}
-	new_location, err := parse.Parse(new(StringOrInt), `"I can parse Go string!"`)
+	new_location, err := parse.Parse(new(StringOrInt), `"I can parse Go string!"`, nil)
 
+Parser supports left recursion out of the box so you can parse expressions without a problem.
 */
 package parse
 
@@ -57,13 +58,13 @@ import (
 type Error struct {
 	// Original string
 	Str []byte
-	// Location of this erro in original string
+	// Location of this error in the original string
 	Location int
 	// Error message
 	Message string
 }
 
-// FirstOf is empty structure that indicates that we need to parse first expression of the fields of structure.
+// FirstOf is structure that indicates that we need to parse first expression of the fields of structure.
 // After pasring Field contains name of parsed field.
 type FirstOf struct {
 	// Name of parsed field
@@ -131,8 +132,7 @@ func (self packratValue) String() string {
 	return fmt.Sprintf("{ parsed = %v, recursion = (%d : %d), new_loc = %d, err = %v }", self.parsed, self.recursionLevel, self.maxRecursionLevel, self.new_loc, self.err)
 }
 
-// Context is structure containing parameters of the parsing process.
-// You must use methods to control parameters: all the fields are private.
+// Params is structure containing parameters of the parsing process.
 type Params struct {
 	// Function to skip whitespaces. If nil will not skip anything.
 	SkipWhite            func (str []byte, loc int) int
@@ -955,6 +955,12 @@ func skipDefault(str []byte, loc int) int {
 	return len(str)
 }
 
+// Parse value from string and return position after parsing and error.
+// This function parses value using PEG parser.
+// result is pointer to value
+// str is string to parse
+// params is parsing parameters
+// Function returns new_location - location after the parsed string. On errors err != nil.
 func Parse(result interface{}, str []byte, params *Params) (new_location int, err error) {
 	type_of := reflect.TypeOf(result)
 	value_of := reflect.ValueOf(result)
@@ -978,6 +984,7 @@ func Parse(result interface{}, str []byte, params *Params) (new_location int, er
 	return
 }
 
+// Create new default parameters object.
 func NewParams() *Params {
 	return &Params{ SkipWhite: skipDefault }
 }
