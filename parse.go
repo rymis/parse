@@ -37,7 +37,26 @@ If you need to parse variant types you need to insert FirstOf as first field in 
 	}
 	new_location, err := parse.Parse(new(StringOrInt), `"I can parse Go string!"`, nil)
 
-Parser supports left recursion out of the box so you can parse expressions without a problem.
+Optional fields must be of pointer type and contain `optional:"true"` tag. You can use slices that
+will be parsed as ELEMENT* or ELEMENT+ (if `repeat:"+"` was set in tag).
+
+Parser supports left recursion out of the box so you can parse expressions without a problem. For example you can parse this grammar:
+	X <- E
+	E <- X '-' Number / Number
+with
+	type X struct {
+		Expr E
+	}
+	type E struct {
+		FirstOf
+		Expr struct {
+			Expr *X
+			_ string `regexp:"-"`
+			N uint64
+		}
+		N uint64
+
+	}
 */
 package parse
 
@@ -946,20 +965,14 @@ func (ctx *context) parse(value_of reflect.Value, tag reflect.StructTag, locatio
 }
 
 func skipDefault(str []byte, loc int) int {
-	for i := loc; i < len(str); i++ {
-		if str[i] != ' ' && str[i] != '\t' && str[i] != '\n' && str[i] != '\r' {
-			return i
-		}
-	}
-
-	return len(str)
+	return SkipSpaces(str, loc)
 }
 
 // Parse value from string and return position after parsing and error.
 // This function parses value using PEG parser.
-// result is pointer to value
-// str is string to parse
-// params is parsing parameters
+// Here: result is pointer to value,
+// str is string to parse,
+// params is parsing parameters.
 // Function returns new_location - location after the parsed string. On errors err != nil.
 func Parse(result interface{}, str []byte, params *Params) (new_location int, err error) {
 	type_of := reflect.TypeOf(result)
