@@ -69,6 +69,8 @@ type FirstOf struct {
 	Field string
 }
 
+// Returns error string of parse error.
+// It is well-formed version of error so you can simply write it to user.
 func (self Error) Error() string {
 	start := 0
 	lineno := 1
@@ -99,9 +101,13 @@ func (self Error) Error() string {
 	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.Message, s)
 }
 
+// Key in packrat table representation
 type packratKey struct {
+	// Location of parsed value
 	location int
+	// Type of parsed value
 	t        reflect.Type
+	// Tag for field
 	tag      reflect.StructTag
 }
 
@@ -110,7 +116,7 @@ type packratValue struct {
 	parsed    bool
 
 	// Recursion level
-	rec_l    int
+	recursionLevel, maxRecursionLevel int
 
 	// New location
 	new_loc  int
@@ -120,19 +126,28 @@ type packratValue struct {
 	err      error
 }
 
+func (self packratValue) String() string {
+	return fmt.Sprintf("{ parsed = %v, recursion = (%d : %d), new_loc = %d, err = %v }", self.parsed, self.recursionLevel, self.maxRecursionLevel, self.new_loc, self.err)
+}
+
 // Context is structure containing parameters of the parsing process.
 // You must use methods to control parameters: all the fields are private.
-type Context struct {
-	skipWhite func (str []byte, loc int) int
-	packrat_enabled bool
-	debug bool
+type Params struct {
+	// Function to skip whitespaces. If nil will not skip anything.
+	SkipWhite            func (str []byte, loc int) int
+	// Flag to enable packrat parsing. If not set packrat table is used only for left recursion detection and processing.
+	PackratEnabled       bool
+	// Enable grammar debugging messages. It is useful if you have some problems with grammar but produces a lot of output.
+	Debug                bool
 }
 
 // Private variant of context. Contains string and packrat table.
 type context struct {
-	Context
+	params *Params
 	str []byte
 	packrat map[packratKey]packratValue
+	// Locations with recursive rules:
+	recursiveLocations  map[int]bool
 }
 
 // Create new parse.Error:
@@ -155,6 +170,7 @@ var (
 	_compiled_mtx sync.Mutex
 )
 
+// Compile regular expression and save in global map.
 func compileRegexp(rx string) (*regexp.Regexp, error) {
 	_compiled_mtx.Lock()
 	defer _compiled_mtx.Unlock()
@@ -172,7 +188,8 @@ func compileRegexp(rx string) (*regexp.Regexp, error) {
 	return r, err
 }
 
-// Parse regular expression and return result as string
+// Parse regular expression and return result as string.
+// This function searches for compiled regexp in global and must be faster when compile + find.
 func (ctx *context) parseRegexp(location int, rx string) (string, int, error) {
 	r, err := compileRegexp(rx)
 	if err != nil {
@@ -344,8 +361,9 @@ func (ctx *context) parseString(location int) (string, int, error) {
 	return "", location, ctx.NewError(location, "Waiting for Go string");
 }
 
+// Check if there was overflow for <size> bits type
 func (ctx *context) checkUintOverflow(v uint64, location int, size uint) (uint64, int, error) {
-	if size == 8 {
+	if size >= 64 {
 		return v, location, nil
 	}
 
@@ -356,6 +374,8 @@ func (ctx *context) checkUintOverflow(v uint64, location int, size uint) (uint64
 	return v, location, nil
 }
 
+// Parse uint value and save it in uint64.
+// size is value size in bits.
 func (ctx *context) parseUint64(location int, size uint) (uint64, int, error) {
 	if location >= len(ctx.str) {
 		return 0, location, ctx.NewError(location, "Unexpected end of file. Waiting for integer literal.")
@@ -428,6 +448,8 @@ func (ctx *context) parseUint64(location int, size uint) (uint64, int, error) {
 	return 0, location, ctx.NewError(location, "Waiting for integer literal")
 }
 
+// Parse int value and save it in int64.
+// size is value size in bits.
 func (ctx *context) parseInt64(location int, size uint) (int64, int, error) {
 	neg := false
 	if location >= len(ctx.str) {
@@ -460,13 +482,26 @@ func (ctx *context) parseInt64(location int, size uint) (int64, int, error) {
 
 // Skip whitespace:
 func (ctx *context) skipWS(loc int) int {
-	l := ctx.skipWhite(ctx.str, loc)
-	if l >= loc {
-		return l
+	if ctx.params != nil {
+		if ctx.params.SkipWhite != nil {
+			l := ctx.params.SkipWhite(ctx.str, loc)
+			if l >= loc {
+				return l
+			}
+		}
 	}
+
 	return loc
 }
 
+// Show debug message if need to
+func (ctx *context) debug(msg string, args... interface{}) {
+	if ctx.params != nil && ctx.params.Debug {
+		fmt.Printf("DEBUG: " + msg, args...)
+	}
+}
+
+// Helper function to parse struture field.
 func (ctx *context) parseField(value_of reflect.Value, idx int, location int) (new_loc int, err error) {
 	type_of := value_of.Type()
 	f_type := type_of.Field(idx)
@@ -480,9 +515,7 @@ func (ctx *context) parseField(value_of reflect.Value, idx int, location int) (n
 	if f_type.Name != "_" {
 		r, l := utf8.DecodeRuneInString(f_type.Name)
 		if l == 0 || !unicode.IsUpper(r) { // Private field
-			if ctx.debug {
-				fmt.Printf("\t[PRIVATE FIELD: %s]\n", f_type.Name)
-			}
+			ctx.debug("\t[PRIVATE FIELD: %s]\n", f_type.Name)
 
 			return location, nil
 		}
@@ -499,9 +532,7 @@ func (ctx *context) parseField(value_of reflect.Value, idx int, location int) (n
 	not_any := f_type.Tag.Get("not_any") == "true"
 	followed_by := f_type.Tag.Get("followed_by") == "true"
 
-	if ctx.debug {
-		fmt.Printf("\t[FIELD: %s] (not_any=%v, followed_by=%v)\n", f_type.Name, not_any, followed_by)
-	}
+	ctx.debug("[FIELD: %s] (type=%v, not_any=%v, followed_by=%v)\n", f_type.Name, f_type.Type, not_any, followed_by)
 
 	var l int
 	l, err = ctx.parse(f, f_type.Tag, location)
@@ -537,7 +568,7 @@ func (ctx *context) parseField(value_of reflect.Value, idx int, location int) (n
 
 			mtp := method.Type()
 			if mtp.NumIn() != 1 || mtp.NumOut() != 1 || mtp.In(0) != f_type.Type || mtp.Out(0).Name() != "error" {
-				return location, errors.New(fmt.Sprintf("Invalid method `%s' signature. Waiting for func (%s) error", set, f.Type().Name()))
+				return location, errors.New(fmt.Sprintf("Invalid method `%s' signature. Waiting for func (%v) error", set, f.Type()))
 			}
 
 			resv := method.Call([]reflect.Value{f})[0]
@@ -555,114 +586,6 @@ func (ctx *context) parseField(value_of reflect.Value, idx int, location int) (n
 		new_loc = ctx.skipWS(l)
 		return
 	}
-}
-
-// Internal parse function
-func (ctx *context) parse(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
-	if !ctx.packrat_enabled {
-		new_loc, err = ctx.parseValue(value_of, tag, location)
-		if ctx.debug {
-			if err != nil {
-				fmt.Printf("ER [%d] {%s:%v} %v\n", location, value_of.Type(), tag, err)
-			} else {
-				fmt.Printf("OK [%d->%d] {%s:%v} %v\n", location, new_loc, value_of.Type(), tag, value_of.Interface())
-			}
-		}
-		return
-	}
-
-	key := packratKey{location, value_of.Type(), tag}
-	cache, ok := ctx.packrat[key]
-	if ok {
-		if ctx.debug {
-			fmt.Printf("CACHE [%d] %v\n", location, cache)
-		}
-
-		if cache.parsed { // Cached value
-			if cache.err == nil {
-				value_of.Set(cache.value.Elem())
-			}
-
-			return cache.new_loc, cache.err
-		}
-
-		// Left recursion parsing in progress:
-		if cache.rec_l == 0 {
-			cache.new_loc = location
-			cache.err = ctx.NewError(location, "Waiting for %s", key.t.Name)
-			cache.value = reflect.New(key.t)
-			ctx.packrat[key] = cache
-
-			save_value := reflect.New(key.t)
-			save_loc   := location
-			var save_err error
-			// Save old and call recursive with nil:
-			for {
-				save_value.Elem().Set(cache.value.Elem())
-				save_loc = cache.new_loc
-				save_err = cache.err
-
-				cache.rec_l = 1
-				ctx.packrat[key] = cache
-				l, err := ctx.parseValue(value_of, tag, location)
-				if err != nil { // This step was not good
-					cache.parsed = true
-					cache.value.Elem().Set(save_value.Elem())
-					cache.new_loc = save_loc
-					cache.err = save_err
-					ctx.packrat[key] = cache
-					value_of.Set(save_value.Elem())
-
-					return save_loc, save_err
-				} else if l <= save_loc { // End of recursion
-					cache.parsed = true
-					cache.value.Elem().Set(value_of)
-					cache.new_loc = l
-					cache.err = nil
-					cache.rec_l = 0
-					ctx.packrat[key] = cache
-					return l, nil
-				}
-
-				cache.new_loc = l
-				cache.err = nil
-				cache.value.Elem().Set(value_of)
-				cache.rec_l = 1
-
-				ctx.packrat[key] = cache
-			}
-		} else if cache.rec_l == 1 {
-			cache.rec_l = 2
-			ctx.packrat[key] = cache
-
-			return ctx.parseValue(value_of, tag, location)
-		} else /* if cache.rec_l == 2 */ {
-			// We need to return fail:
-			return location, ctx.NewError(location, "Waiting for %s", key.t.Name)
-		}
-
-		return location, ctx.NewError(location, "LR failed")
-	}
-
-	ctx.packrat[key] = packratValue{ parsed: false, rec_l: 0 }
-
-	l, err := ctx.parseValue(value_of, tag, location)
-
-	cache = ctx.packrat[key]
-	cache.parsed = true
-	cache.err = err
-	if err == nil {
-		cache.value = reflect.New(key.t)
-		cache.value.Elem().Set(value_of)
-	}
-	cache.new_loc = l
-	ctx.packrat[key] = cache
-
-	if ctx.debug {
-		fmt.Printf("SET CACHE [%d] %v\n", location, cache)
-	}
-
-	return l, err
 }
 
 // Internal parse function without packrat:
@@ -846,6 +769,132 @@ func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, lo
 	return 0, nil
 }
 
+// Internal parse function
+func (ctx *context) parse(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
+	ctx.debug("[PARSE {%v} `%v` %d %v]\n", value_of.Type(), tag, location, ctx.params)
+
+	if ctx.params == nil || !ctx.params.PackratEnabled {
+		new_loc, err = ctx.parseValue(value_of, tag, location)
+		if err != nil {
+			ctx.debug("ER [%d] {%s:%v} %v\n", location, value_of.Type(), tag, err)
+		} else {
+			ctx.debug("OK [%d->%d] {%s:%v} %v\n", location, new_loc, value_of.Type(), tag, value_of.Interface())
+		}
+		return
+	}
+
+	key := packratKey{location, value_of.Type(), tag}
+	cache, ok := ctx.packrat[key]
+	if ok {
+		ctx.debug("CACHE [%d] %v\n", location, cache)
+
+		if cache.parsed { // Cached value
+			if cache.err == nil {
+				value_of.Set(cache.value.Elem())
+			}
+
+			return cache.new_loc, cache.err
+		}
+
+		if cache.recursionLevel == 0 { // Recursion detected:
+			// Left recursion parsing in progress:
+			ctx.recursiveLocations[location] = true
+
+			cache.recursionLevel = 1
+			cache.err = ctx.NewError(location, "Waiting for %v", key.t)
+			cache.new_loc = location
+			ctx.packrat[key] = cache
+			return location, cache.err
+		} else { // Return previous recursion level result:
+			if cache.err == nil {
+				value_of.Set(cache.value.Elem())
+			}
+
+			return cache.new_loc, cache.err
+		}
+
+		return location, errors.New("LR failed") // Not reached
+	}
+
+	ctx.packrat[key] = packratValue{ parsed: false, recursionLevel: 0, maxRecursionLevel: 0, new_loc: location }
+	l, err := ctx.parseValue(value_of, tag, location)
+	cache = ctx.packrat[key]
+
+	if cache.recursionLevel == 0 { // Not recursive
+		if !ctx.recursiveLocations[location] {
+			cache.parsed = true
+			cache.err = err
+			if err == nil {
+				cache.value = reflect.New(key.t)
+				cache.value.Elem().Set(value_of)
+			}
+			cache.new_loc = l
+			ctx.packrat[key] = cache
+		} else {
+			delete(ctx.packrat, key)
+		}
+
+		return l, err
+	} else {
+		ctx.recursiveLocations[location] = true
+
+		cache.new_loc = l
+		cache.err = err
+		if err == nil {
+			cache.value = reflect.New(key.t)
+			cache.value.Elem().Set(value_of)
+		}
+		cache.recursionLevel = 2
+		ctx.packrat[key] = cache
+
+		for {
+			// We will parse n times until the error or stop of position increasing:
+			// cache = ctx.packrat[key]
+
+			cache.recursionLevel = 2
+			ctx.packrat[key] = cache
+
+			l, err := ctx.parseValue(value_of, tag, location)
+
+			cache = ctx.packrat[key]
+			if err != nil { // This step was not good so we must return previous value
+				cache.parsed = true
+				ctx.packrat[key] = cache
+
+				if cache.err == nil {
+					value_of.Set(cache.value.Elem())
+				}
+
+				return cache.new_loc, cache.err
+			} else if l <= cache.new_loc { // End of recursion: there was no increasing of position
+				if cache.err != nil {
+					cache.value = reflect.New(key.t)
+					cache.value.Elem().Set(value_of)
+					cache.new_loc = l
+					cache.err = nil
+				} else {
+					value_of.Set(cache.value.Elem())
+				}
+				cache.parsed = true
+				cache.recursionLevel = 0
+				ctx.packrat[key] = cache
+				return cache.new_loc, nil
+			}
+
+			cache.new_loc = l
+			cache.err = nil
+			if !cache.value.IsValid() {
+				cache.value = reflect.New(key.t)
+			}
+			cache.value.Elem().Set(value_of)
+
+			ctx.packrat[key] = cache
+		}
+	}
+
+	return l, err
+}
+
 func skipDefault(str []byte, loc int) int {
 	for i := loc; i < len(str); i++ {
 		if str[i] != ' ' && str[i] != '\t' && str[i] != '\n' && str[i] != '\r' {
@@ -856,26 +905,7 @@ func skipDefault(str []byte, loc int) int {
 	return len(str)
 }
 
-func Parse(result interface{}, str []byte) (new_location int, err error) {
-	return ParseFull(result, str, skipDefault)
-}
-
-func ParseFull(result interface{}, str []byte, ignore func ([]byte, int) int) (new_location int, err error) {
-	ctx := new(Context)
-	ctx.SetIgnore(ignore)
-	new_location, err = ctx.Parse(result, str)
-	return
-}
-
-func New() *Context {
-	ctx := new(Context)
-	ctx.skipWhite = skipDefault
-	ctx.packrat_enabled = false
-
-	return ctx
-}
-
-func (ctx *Context) Parse(result interface{}, str []byte) (new_location int, err error) {
+func Parse(result interface{}, str []byte, params *Params) (new_location int, err error) {
 	type_of := reflect.TypeOf(result)
 	value_of := reflect.ValueOf(result)
 
@@ -883,25 +913,22 @@ func (ctx *Context) Parse(result interface{}, str []byte) (new_location int, err
 		return -1, errors.New("Invalid argument for Parse: waiting for pointer")
 	}
 
+	if params == nil {
+		params = &Params{ SkipWhite: skipDefault }
+	}
+
 	C := new(context)
-	C.Context = *ctx
+	C.params = params
 	C.str = str
 	C.packrat = make(map[packratKey]packratValue)
+	C.recursiveLocations = make(map[int]bool)
 
 	new_location, err =  C.parse(value_of.Elem(), reflect.StructTag(""), 0)
 
 	return
 }
 
-func (ctx *Context) SetIgnore(ignore func ([]byte, int) int) {
-	ctx.skipWhite = ignore
-}
-
-func (ctx *Context) SetPackrat(v bool) {
-	ctx.packrat_enabled = v
-}
-
-func (ctx *Context) SetDebug(v bool) {
-	ctx.debug = v
+func NewParams() *Params {
+	return &Params{ SkipWhite: skipDefault }
 }
 

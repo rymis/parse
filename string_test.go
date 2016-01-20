@@ -37,7 +37,7 @@ func TestString(t *testing.T) {
 		var s string
 
 		fmt.Printf("TEST [%d] ", i)
-		l, err := Parse(&s, []byte(t.input))
+		l, err := Parse(&s, []byte(t.input), nil)
 		if err != nil {
 			if t.ok {
 				fmt.Printf("ERROR: `%s` %s\n", t.input, err.Error())

@@ -123,7 +123,7 @@ type abc_B struct {
 
 func TestParse(t *testing.T) {
 	var x tmp
-	l, e := Parse(&x, []byte("Hello    , \n\tworld"))
+	l, e := Parse(&x, []byte("Hello    , \n\tworld"), nil)
 	if e != nil {
 		fmt.Printf("Error: %v\n", e)
 	} else {
@@ -132,7 +132,7 @@ func TestParse(t *testing.T) {
 	}
 
 	var ex expression
-	l, e = Parse(&ex, []byte("12 + (56 * 3) % 10"))
+	l, e = Parse(&ex, []byte("12 + (56 * 3) % 10"), nil)
 
 	if e != nil {
 		fmt.Printf("Error: %v\n", e)
@@ -145,7 +145,7 @@ func TestParse(t *testing.T) {
 
 	for _, s := range([]string{"aabbcc", "", "abc", "aabbc", "aabcc"}) {
 		var g abc_S
-		_, e = Parse(&g, []byte(s))
+		_, e = Parse(&g, []byte(s), nil)
 		fmt.Printf("EXPR: %s\n", s)
 		if e != nil {
 			fmt.Printf("ERROR: %s\n", e.Error())

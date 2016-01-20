@@ -90,16 +90,95 @@ func print_expr(e *EXPR) {
 	}
 }
 
+/* Direct recursion test: */
+type Rt struct {
+	FirstOf
+
+	A *struct {
+		A Rt
+		_ string `regexp:"-"`
+		N string `regexp:"[0-9]+"`
+	}
+	N string `regexp:"[0-9]+"`
+}
+
+func (r Rt) Print() {
+	if r.Field == "A" {
+		r.A.A.Print()
+		fmt.Print("-", r.A.N)
+	} else {
+		fmt.Print(r.N)
+	}
+}
+
+/* Indirect recursion test: */
+type Xt struct {
+	E *Et
+}
+
+type Et struct {
+	FirstOf
+	M struct {
+		X Xt
+		_ string `regexp:"-"`
+		N string `regexp:"[0-9]+"`
+	}
+	N string `regexp:"[0-9]+"`
+}
+
+func (x Xt) Print() {
+	x.E.Print()
+}
+
+func (e Et) Print() {
+	if e.Field == "M" {
+		e.M.X.Print()
+		fmt.Print("-", e.M.N)
+	} else {
+		fmt.Print(e.N)
+	}
+}
+
 func TestPackrat(t *testing.T) {
-	ctx := New()
-	ctx.SetPackrat(true)
-	ctx.SetDebug(true)
+	params := NewParams()
+	params.PackratEnabled = true
+	params.Debug = true
 
-	var expr EXPR
-	l, e := ctx.Parse(&expr, []byte("  10 + 5 - 3 * 2 % 2"))
+	var l int
+	var e error
 
-	fmt.Printf("New location: %d, error: %v\n", l, e)
-	print_expr(&expr)
-	println("")
+	if true {
+		var expr EXPR
+		l, e = Parse(&expr, []byte("  10 + 5 - 3 * 2 % 2"), params)
+
+		fmt.Printf("New location: %d, error: %v\n", l, e)
+		print_expr(&expr)
+		println("")
+	}
+
+	if true {
+		var expr EXPR
+		l, e = Parse(&expr, []byte("1 * 2 * 3 * 4 * 5 + 2 * 3 * 4 * 5 * 6 + 3 * 4 * 5 * 6 * 7 + 4 * 5 * 6 * 7 * 8 + 5 * 6 * 7 * 8 * 9"), params)
+
+		fmt.Printf("New location: %d, error: %v\n", l, e)
+		print_expr(&expr)
+		println("")
+	}
+
+	if true {
+		var x Xt
+		Parse(&x, []byte("  1 - 2 - 3 - 4 - 5"), params)
+		fmt.Printf("New location: %d, error: %v\n", l, e)
+		x.Print()
+		fmt.Println("")
+	}
+
+	if true {
+		var r Rt
+		Parse(&r, []byte("1 - 2 - 3 - 4 - 5"), params)
+		fmt.Printf("New location: %d, error: %v\n", l, e)
+		r.Print()
+		fmt.Println("")
+	}
 }
 
