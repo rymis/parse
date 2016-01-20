@@ -49,6 +49,7 @@ import (
 	"unicode/utf8"
 	"sync"
 	"bytes"
+	"strconv"
 )
 
 // Error is parse error representation.
@@ -480,6 +481,20 @@ func (ctx *context) parseInt64(location int, size uint) (int64, int, error) {
 	return res, l, nil
 }
 
+func (ctx *context) parseFloat(location int, size int) (float64, int, error) {
+	s, l, err := ctx.parseRegexp(location, `[-+]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][-+]?[0-9]+)?`)
+	if err != nil {
+		return 0.0, location, ctx.NewError(location, "Waiting for floating point number")
+	}
+
+	r, err := strconv.ParseFloat(s, size)
+	if err != nil {
+		return 0.0, location, ctx.NewError(location, "Invalid floating point number")
+	}
+
+	return r, l, nil
+}
+
 // Skip whitespace:
 func (ctx *context) skipWS(loc int) int {
 	if ctx.params != nil {
@@ -709,6 +724,36 @@ func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, lo
 		location = l
 		return location, nil
 
+	case reflect.Bool:
+		if location + 3 < len(ctx.str) &&
+				ctx.str[location    ] == 't' &&
+				ctx.str[location + 1] == 'r' &&
+				ctx.str[location + 2] == 'u' &&
+				ctx.str[location + 3] == 'e' {
+
+			value_of.SetBool(true)
+		} else if location + 4 < len(ctx.str) &&
+				ctx.str[location    ] == 'f' &&
+				ctx.str[location + 1] == 'a' &&
+				ctx.str[location + 2] == 'l' &&
+				ctx.str[location + 3] == 's' &&
+				ctx.str[location + 4] == 'e' {
+
+			value_of.SetBool(false)
+		} else {
+			return location, ctx.NewError(location, "Waiting for boolean value")
+		}
+
+	case reflect.Float32, reflect.Float64:
+		r, l, err := ctx.parseFloat(location, type_of.Bits())
+		if err != nil {
+			return location, err
+		}
+		value_of.SetFloat(r)
+		location = l
+		return location, nil
+	/* TODO: complex numbers */
+
 	case reflect.Slice:
 		min := 0
 
@@ -773,7 +818,7 @@ func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, lo
 func (ctx *context) parse(value_of reflect.Value, tag reflect.StructTag, location int) (new_loc int, err error) {
 	ctx.debug("[PARSE {%v} `%v` %d %v]\n", value_of.Type(), tag, location, ctx.params)
 
-	if ctx.params == nil || !ctx.params.PackratEnabled {
+	if false && (ctx.params == nil || !ctx.params.PackratEnabled) { // TODO: remove this code completely
 		new_loc, err = ctx.parseValue(value_of, tag, location)
 		if err != nil {
 			ctx.debug("ER [%d] {%s:%v} %v\n", location, value_of.Type(), tag, err)
@@ -822,14 +867,18 @@ func (ctx *context) parse(value_of reflect.Value, tag reflect.StructTag, locatio
 
 	if cache.recursionLevel == 0 { // Not recursive
 		if !ctx.recursiveLocations[location] {
-			cache.parsed = true
-			cache.err = err
-			if err == nil {
-				cache.value = reflect.New(key.t)
-				cache.value.Elem().Set(value_of)
+			if ctx.params == nil || !ctx.params.PackratEnabled {
+				delete(ctx.packrat, key)
+			} else {
+				cache.parsed = true
+				cache.err = err
+				if err == nil {
+					cache.value = reflect.New(key.t)
+					cache.value.Elem().Set(value_of)
+				}
+				cache.new_loc = l
+				ctx.packrat[key] = cache
 			}
-			cache.new_loc = l
-			ctx.packrat[key] = cache
 		} else {
 			delete(ctx.packrat, key)
 		}
