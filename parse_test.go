@@ -7,7 +7,7 @@ import (
 
 type tmp struct {
 	A string `regexp:"[hH]ello"`
-	_ string `regexp:","`
+	_ string `literal:","`
 	_ *string `set:"Set_w" optional:"true" regexp:"[wW]orld"`
 	w string
 }

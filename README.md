@@ -7,7 +7,7 @@ Simple example:
 ```
 type Hello struct {
 	Hello string `regexp:"[hH]ello"`
-	_     string `regexp:","`
+	_     string `literal:","`
 	Name  string `regexp:"[a-zA-Z]+"`
 }
 ...

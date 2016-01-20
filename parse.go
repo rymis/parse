@@ -678,9 +678,19 @@ func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, lo
 		var s string
 		rx := tag.Get("regexp")
 		if rx == "" {
-			s, location, err = ctx.parseString(location)
-			if err != nil {
-				return location, err
+			lit := tag.Get("literal")
+			if lit == "" {
+				s, location, err = ctx.parseString(location)
+				if err != nil {
+					return location, err
+				}
+			} else {
+				if strAt(ctx.str, location, lit) {
+					s = string(ctx.str[location:location + len(lit)])
+					location += len(lit)
+				} else {
+					return location, ctx.NewError(location, "Waiting for '%s'", lit)
+				}
 			}
 		} else {
 			s, location, err = ctx.parseRegexp(location, rx)
