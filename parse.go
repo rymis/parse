@@ -2,14 +2,14 @@
 Easy to use PEG implementation with Go.
 
 This package contains PEG (Parsing Expressions Grammar) implementation that could be used with Go.
-This library is much different from another libraries because grammar mapped to Go types, so you don't need to use
-external grammar files nor use expressions to specify one like with pyparsing or Boost.Spirit.
+This library is much different from other libraries because grammar mapped to Go types, so you don't need to use
+external grammar files nor expressions to specify one like with pyparsing or Boost.Spirit.
 
 For example you can parse hello world using this structure:
 
 	type HelloWorld struct {
 		Hello string `regexp:"[hH]ello"`
-		_     string `regexp:","`
+		_     string `literal:","`
 		World string `regexp:"[a-zA-Z]+"`
 		_     string `regexp:"!?"`
 	}
@@ -38,7 +38,51 @@ If you need to parse variant types you need to insert FirstOf as first field in 
 	new_location, err := parse.Parse(new(StringOrInt), `"I can parse Go string!"`, nil)
 
 Optional fields must be of pointer type and contain `optional:"true"` tag. You can use slices that
-will be parsed as ELEMENT* or ELEMENT+ (if `repeat:"+"` was set in tag).
+will be parsed as ELEMENT* or ELEMENT+ (if `repeat:"+"` was set in tag). You can specify another tags and types listed bellow.
+
+	+-------------+-------------+----------------------------------------------------+
+	| Type        | Tag         | Description                                        |
+	+-------------+-------------+----------------------------------------------------+
+	| string      |             | Parse Go string. `string` and "string" are both    |
+	|             |             | supported.                                         |
+	+-------------+-------------+----------------------------------------------------+
+	| string      | regexp      | Parse regular expression in regexp module syntax.  |
+	+-------------+-------------+----------------------------------------------------+
+	| string      | literal     | Parse literal specified in tag. If there are both  |
+	|             |             | regexp and literal specified regexp will be used.  |
+	+-------------+-------------+----------------------------------------------------+
+	| int*        |             | Parse integer constant. Hexadecimal, Octal and     |
+	|             |             | decimal constants supported. int32 and rune types  |
+	|             |             | are the same type in Go, so int32 parse characters |
+	|             |             | in Go syntax.                                      |
+	+-------------+-------------+----------------------------------------------------+
+	| uint*       |             | Same as int* but unsigned constant.                |
+	+-------------+-------------+----------------------------------------------------+
+	| float*      |             | Parse floating point number.                       |
+	+-------------+-------------+----------------------------------------------------+
+	| bool        |             | Parse boolean constant (true or false)             |
+	+-------------+-------------+----------------------------------------------------+
+	| []type      | repeat      | Parse sequence of type. If repeat is not specified |
+	|             |             | or repeat is '*' here could be zero or more        |
+	|             |             | elements. If repeat is '+' here could be one or    |
+	|             |             | more elements.                                     |
+	+-------------+-------------+----------------------------------------------------+
+	| *type       | optional    | Parse type. Element will be allocated or set to nil|
+	|             |             | for optional elements that doesn't present. If     |
+	|             |             | optional specified and set to 'true' element is    |
+	|             |             | optional: if it is not present in the input field  |
+	|             |             | will be nil.                                       |
+	+-------------+-------------+----------------------------------------------------+
+	| any         | followed_by | Element will be parsed but position will not be    |
+	|             |             | increased if this tag present and set to 'true'.   |
+	+-------------+-------------+----------------------------------------------------+
+	| any         | not_any     | Element must not be present at this position. If   |
+	|             |             | it parsed then error'll be returned.               |
+	+-------------+-------------+----------------------------------------------------+
+	| any         | set         | If present this tag contains name of the method to |
+	|             |             | call after parsing of element. Method must have    |
+	|             |             | signature func (x element-type) error.             |
+	+-------------+-------------+----------------------------------------------------+
 
 Parser supports left recursion out of the box so you can parse expressions without a problem. For example you can parse this grammar:
 	X <- E
