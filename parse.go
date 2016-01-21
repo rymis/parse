@@ -1068,7 +1068,7 @@ func SkipSpaces(str []byte, loc int) int {
 }
 
 func strAt(str []byte, loc int, s string) bool {
-	if loc + len(s) < len(str) {
+	if loc + len(s) <= len(str) {
 		for i := range(s) {
 			if str[loc + i] != s[i] {
 				return false
