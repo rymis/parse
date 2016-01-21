@@ -137,7 +137,7 @@ type packratValue struct {
 	parsed    bool
 
 	// Recursion level
-	recursionLevel, maxRecursionLevel int
+	recursionLevel int
 
 	// New location
 	new_loc  int
@@ -148,7 +148,7 @@ type packratValue struct {
 }
 
 func (self packratValue) String() string {
-	return fmt.Sprintf("{ parsed = %v, recursion = (%d : %d), new_loc = %d, err = %v }", self.parsed, self.recursionLevel, self.maxRecursionLevel, self.new_loc, self.err)
+	return fmt.Sprintf("{ parsed = %v, recursion = %d, new_loc = %d, err = %v }", self.parsed, self.recursionLevel, self.new_loc, self.err)
 }
 
 // Params is structure containing parameters of the parsing process.
@@ -549,7 +549,7 @@ func (ctx *context) parseField(value_of reflect.Value, idx int, location int) (n
 	if f_type.Name != "_" {
 		r, l := utf8.DecodeRuneInString(f_type.Name)
 		if l == 0 || !unicode.IsUpper(r) { // Private field
-			ctx.debug("\t[PRIVATE FIELD: %s]\n", f_type.Name)
+			ctx.debug("[PRIVATE FIELD: %s]\n", f_type.Name)
 
 			return location, nil
 		}
@@ -891,7 +891,7 @@ func (ctx *context) parse(value_of reflect.Value, tag reflect.StructTag, locatio
 		return location, errors.New("LR failed") // Not reached
 	}
 
-	ctx.packrat[key] = packratValue{ parsed: false, recursionLevel: 0, maxRecursionLevel: 0, new_loc: location }
+	ctx.packrat[key] = packratValue{ parsed: false, recursionLevel: 0, new_loc: location }
 	l, err := ctx.parseValue(value_of, tag, location)
 	cache = ctx.packrat[key]
 
