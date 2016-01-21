@@ -4,7 +4,7 @@ parse is Go implementation of PEG parser.
 This is simple Go parser that uses mapping from Go types to PEG language definitions.
 
 Simple example:
-```
+``` Go
 type Hello struct {
 	Hello string `regexp:"[hH]ello"`
 	_     string `literal:","`
@@ -14,4 +14,6 @@ type Hello struct {
 var hello Hello
 new_location, err := parse.Parse(&hello, []byte("Hello, user"), nil)
 ```
+
+Documentation is here: https://godoc.org/github.com/rymis/parse
 
