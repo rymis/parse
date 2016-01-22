@@ -235,7 +235,7 @@ func (ctx *context) NewError(location int, msg string, args... interface{}) erro
 // Map of compiled regular expressions. I beleive that take value from map is faster operation then compile regular
 // expression in most cases.
 var (
-	_compiled_map map[string]*regexp.Regexp
+	_compiled_map map[string]*regexp.Regexp = make(map[string]*regexp.Regexp)
 	_compiled_mtx sync.Mutex
 )
 
@@ -250,7 +250,7 @@ func compileRegexp(rx string) (*regexp.Regexp, error) {
 	}
 
 	r, err := regexp.Compile("^" + rx)
-	if err != nil {
+	if err == nil {
 		_compiled_map[rx] = r
 	}
 
@@ -803,24 +803,17 @@ func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, lo
 		return location, nil
 
 	case reflect.Bool:
-		if location + 3 < len(ctx.str) &&
-				ctx.str[location    ] == 't' &&
-				ctx.str[location + 1] == 'r' &&
-				ctx.str[location + 2] == 'u' &&
-				ctx.str[location + 3] == 'e' {
-
+		if strAt(ctx.str, location, "true") {
 			value_of.SetBool(true)
-		} else if location + 4 < len(ctx.str) &&
-				ctx.str[location    ] == 'f' &&
-				ctx.str[location + 1] == 'a' &&
-				ctx.str[location + 2] == 'l' &&
-				ctx.str[location + 3] == 's' &&
-				ctx.str[location + 4] == 'e' {
-
+			location += 4
+		} else if strAt(ctx.str, location, "false") {
 			value_of.SetBool(false)
+			location += 5
 		} else {
 			return location, ctx.NewError(location, "Waiting for boolean value")
 		}
+
+		return location, nil
 
 	case reflect.Float32, reflect.Float64:
 		r, l, err := ctx.parseFloat(location, type_of.Bits())
@@ -870,7 +863,7 @@ func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, lo
 			if len(delimiter) > 0 {
 				nl = ctx.skipWS(location)
 
-				if strAt(ctx.str, location, delimiter) {
+				if strAt(ctx.str, nl, delimiter) {
 					location = nl + len(delimiter)
 				} else {
 					// Here we've got at least one parsed member, so it could not be an error.
