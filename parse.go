@@ -67,6 +67,11 @@ will be parsed as ELEMENT* or ELEMENT+ (if `repeat:"+"` was set in tag). You can
 	|             |             | elements. If repeat is '+' here could be one or    |
 	|             |             | more elements.                                     |
 	+-------------+-------------+----------------------------------------------------+
+	| []type      | delimiter   | Parse list with delimiter literal. It is very      |
+	|             |             | common situation to have a DELIMITER b DELIMITER...|
+	|             |             | like lists so I think that it is good idea to      |
+	|             |             | support such lists out of the box.                 |
+	+-------------+-------------+----------------------------------------------------+
 	| *type       | optional    | Parse type. Element will be allocated or set to nil|
 	|             |             | for optional elements that doesn't present. If     |
 	|             |             | optional specified and set to 'true' element is    |
@@ -838,6 +843,8 @@ func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, lo
 			min = 1
 		}
 
+		delimiter := tag.Get("delimiter")
+
 		tp := type_of.Elem()
 		value_of.SetLen(0)
 		for {
@@ -859,6 +866,17 @@ func (ctx *context) parseValue(value_of reflect.Value, tag reflect.StructTag, lo
 
 			location = nl
 			value_of.Set(reflect.Append(value_of, v.Elem()))
+
+			if len(delimiter) > 0 {
+				nl = ctx.skipWS(location)
+
+				if strAt(ctx.str, location, delimiter) {
+					location = nl + len(delimiter)
+				} else {
+					// Here we've got at least one parsed member, so it could not be an error.
+					return location, nil
+				}
+			}
 		}
 
 	case reflect.Ptr:
