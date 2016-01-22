@@ -200,8 +200,8 @@ func (self packratValue) String() string {
 	return fmt.Sprintf("{ parsed = %v, recursion = %d, new_loc = %d, err = %v }", self.parsed, self.recursionLevel, self.new_loc, self.err)
 }
 
-// Params is structure containing parameters of the parsing process.
-type Params struct {
+// Options is structure containing parameters of the parsing process.
+type Options struct {
 	// Function to skip whitespaces. If nil will not skip anything.
 	SkipWhite            func (str []byte, loc int) int
 	// Flag to enable packrat parsing. If not set packrat table is used only for left recursion detection and processing.
@@ -212,7 +212,7 @@ type Params struct {
 
 // Private variant of context. Contains string and packrat table.
 type context struct {
-	params *Params
+	params *Options
 	str []byte
 	packrat map[packratKey]packratValue
 	// Locations with recursive rules:
@@ -1046,7 +1046,7 @@ func skipDefault(str []byte, loc int) int {
 // str is string to parse,
 // params is parsing parameters.
 // Function returns new_location - location after the parsed string. On errors err != nil.
-func Parse(result interface{}, str []byte, params *Params) (new_location int, err error) {
+func Parse(result interface{}, str []byte, params *Options) (new_location int, err error) {
 	type_of := reflect.TypeOf(result)
 	value_of := reflect.ValueOf(result)
 
@@ -1055,7 +1055,7 @@ func Parse(result interface{}, str []byte, params *Params) (new_location int, er
 	}
 
 	if params == nil {
-		params = &Params{ SkipWhite: skipDefault }
+		params = &Options{ SkipWhite: skipDefault }
 	}
 
 	C := new(context)
@@ -1070,8 +1070,8 @@ func Parse(result interface{}, str []byte, params *Params) (new_location int, er
 }
 
 // Create new default parameters object.
-func NewParams() *Params {
-	return &Params{ SkipWhite: skipDefault }
+func NewOptions() *Options {
+	return &Options{ SkipWhite: skipDefault }
 }
 
 // Skip spaces, tabulations and newlines:

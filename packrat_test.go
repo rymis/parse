@@ -140,7 +140,7 @@ func (e Et) Print() {
 }
 
 func TestPackrat(t *testing.T) {
-	params := NewParams()
+	params := NewOptions()
 	params.PackratEnabled = true
 	params.Debug = true
 
