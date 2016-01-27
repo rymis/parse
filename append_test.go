@@ -16,7 +16,7 @@ type white struct {
 type config struct {
 	Sections []section `repeat:"*"`
 	W          white
-	Eof        string `not_any:"true" regexp:".|\\n"`
+//	Eof        string `not_any:"true" regexp:".|\\n"`
 }
 
 type section struct {
@@ -36,7 +36,7 @@ type pair struct {
 	_          string `literal:"="`
 	W2         spaces
 	Value      value
-	W3          spaces
+	W3         spaces
 }
 
 type value struct {
@@ -50,7 +50,8 @@ type value struct {
 
 type array struct {
 	_          string `literal:"["`
-	Values   []value `delimiter:","`
+	Values   []value  `delimiter:","`
+	W2         white
 	_          string `literal:"]"`
 }
 
@@ -65,6 +66,14 @@ func skip(str []byte, loc int) int {
 }
 
 var test1 string = `
+Section {
+	name = 1
+	name = "String"
+	name = true
+	name = Raw string
+	name = [ 1, 2 ]
+}
+
 Section0 {
 	name1 = [ 1   ,  2 , 3 ]
 	name2 = 2

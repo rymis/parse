@@ -278,7 +278,7 @@ func appendField(type_of reflect.Type, fields *[]field, idx int) error {
 
 	fld.Set = f_type.Tag.Get("set")
 
-	p, err := compile(f_type.Type, f_type.Tag)
+	p, err := compileInternal(f_type.Type, f_type.Tag)
 	if err != nil {
 		return nil
 	}
@@ -290,16 +290,26 @@ func appendField(type_of reflect.Type, fields *[]field, idx int) error {
 	return nil
 }
 
+// Type and tag for parse keys
 type typeAndTag struct {
 	Type     reflect.Type
 	Tag      reflect.StructTag
 }
 
+// This map is not so big, because it will contain only type+tag keys.
 var _compiledParsers = make(map[typeAndTag]parser)
 var _lastId uint = 1
-var _lastIdMutex sync.Mutex
+var _compileMutex sync.Mutex
 
+// Compile parser for type. Only one compilation process is possible in the same time.
 func compile(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
+	_compileMutex.Lock()
+	defer _compileMutex.Unlock()
+
+	return compileInternal(type_of, tag)
+}
+
+func compileInternal(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
 	key := typeAndTag{type_of, tag}
 	p, ok := _compiledParsers[key]
 	if ok {
@@ -316,11 +326,9 @@ func compile(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
 	}
 
 	p.SetString(fmt.Sprintf("%v `%v`", type_of, tag))
-	_lastIdMutex.Lock()
 	p.SetId(_lastId)
 	_lastId++
 	proxy.SetParser(p)
-	_lastIdMutex.Unlock()
 
 	return p, nil
 }
@@ -397,7 +405,7 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 
 		delimiter := tag.Get("delimiter")
 
-		p, err := compile(type_of.Elem(), "")
+		p, err := compileInternal(type_of.Elem(), "")
 		if err != nil {
 			return nil, err
 		}
@@ -405,7 +413,7 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 		return &sliceParser{ Min: min, Delimiter: delimiter, Parser: p }, nil
 
 	case reflect.Ptr:
-		p, err := compile(type_of.Elem(), tag)
+		p, err := compileInternal(type_of.Elem(), tag)
 		if err != nil {
 			return nil, err
 		}
