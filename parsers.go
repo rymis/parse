@@ -767,7 +767,6 @@ func (self *sliceParser) ParseValue(ctx *parseContext, value_of reflect.Value, l
 		}
 
 		if nl <= location {
-			fmt.Printf("V: %v\nTYPE: %v\nLOC: %d\nVAL: %v\nNL: %d\nSTR: %s\n", v, value_of.Type().Elem(), location, value_of, nl, string(ctx.str[location:]))
 			return -1, errors.New("Invalid grammar: 0-length member of ZeroOrMore")
 		}
 
