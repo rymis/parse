@@ -15,12 +15,12 @@ type proxyParser struct {
 	p parser
 }
 
-func (self *proxyParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (new_loc int, err error) {
+func (self *proxyParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	if self.p == nil {
 		panic("nil parser")
 	}
 
-	return self.p.ParseValue(ctx, value_of, location)
+	return self.p.ParseValue(ctx, value_of, location, err)
 }
 
 func (self *proxyParser) WriteValue(out io.Writer, value_of reflect.Value) error {

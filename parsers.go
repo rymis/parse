@@ -25,7 +25,7 @@ type parser interface {
 	SetString(nm string)
 
 	// Parse function.
-	ParseValue(ctx *parseContext, value_of reflect.Value, location int) (new_loc int, err error)
+	ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int
 
 	// Write value to output stream.
 	WriteValue(out io.Writer, value_of reflect.Value) error
@@ -60,7 +60,7 @@ type boolParser struct {
 }
 
 var boolError string = "Waiting for boolean value"
-func (self *boolParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (new_loc int, err error) {
+func (self *boolParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	if strAt(ctx.str, location, "true") {
 		value_of.SetBool(true)
 		location += 4
@@ -68,7 +68,9 @@ func (self *boolParser) ParseValue(ctx *parseContext, value_of reflect.Value, lo
 		value_of.SetBool(false)
 		location += 5
 	} else {
-		return location, ctx.NewError(location, boolError)
+		err.Location = location
+		err.Message = boolError
+		return -1
 	}
 
 	if location < len(ctx.str) {
@@ -76,11 +78,13 @@ func (self *boolParser) ParseValue(ctx *parseContext, value_of reflect.Value, lo
 			(ctx.str[location] >= 'a' && ctx.str[location] <= 'z') ||
 			(ctx.str[location] >= 'A' && ctx.str[location] <= 'Z') ||
 			(ctx.str[location] >= '0' && ctx.str[location] <= '9') {
-			return location, ctx.NewError(location, boolError)
+			err.Location = location
+			err.Message = boolError
+			return -1
 		}
 	}
 
-	return location, nil
+	return location
 }
 
 func (self *boolParser) WriteValue(out io.Writer, value_of reflect.Value) error {
@@ -101,15 +105,17 @@ type regexpParser struct {
 	err     string
 }
 
-func (self *regexpParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (new_loc int, err error) {
+func (self *regexpParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	m := self.Regexp.Find(ctx.str[location:])
 	if m == nil {
-		return location, ctx.NewError(location, self.err)
+		err.Location = location
+		err.Message = self.err
+		return -1
 	}
 
 	value_of.SetString(string(m))
 
-	return location + len(m), nil
+	return location + len(m)
 }
 
 func (self *regexpParser) WriteValue(out io.Writer, value_of reflect.Value) error {
@@ -139,7 +145,7 @@ type stringParser struct {
 }
 
 // Parse Go unicode value:
-func (ctx *parseContext) parseUnicodeValue(location int) (rune, int, error) {
+func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int) {
 	/*
 	unicode_value    = unicode_char | little_u_value | big_u_value | escaped_char .
 	byte_value       = octal_byte_value | hex_byte_value .
@@ -151,40 +157,46 @@ func (ctx *parseContext) parseUnicodeValue(location int) (rune, int, error) {
 				   escaped_char     = `\` ( "a" | "b" | "f" | "n" | "r" | "t" | "v" | `\` | "'" | `"` ) .
 	*/
 	if location >= len(ctx.str) {
-		return 0, location, ctx.NewError(location, "Unexpected end of file: waiting for Unicode character")
+		err.Location = location
+		err.Message = "Unexpected end of file: waiting for Unicode character"
+		return 0, -1
 	}
 
 	if ctx.str[location] == '\\' {
 		location++
 		if location >= len(ctx.str) {
-			return 0, location, ctx.NewError(location, "Unexpected end of file in escape sequence")
+			err.Location = location
+			err.Message = "Unexpected end of file in escape sequence"
+			return 0, -1
 		}
 
 		if (ctx.str[location] == '\\') {
-			return '\\', location + 1, nil
+			return '\\', location + 1
 		} else if (ctx.str[location] == 'a') {
-			return '\a', location + 1, nil
+			return '\a', location + 1
 		} else if (ctx.str[location] == 'b') {
-			return '\b', location + 1, nil
+			return '\b', location + 1
 		} else if (ctx.str[location] == 'f') {
-			return '\f', location + 1, nil
+			return '\f', location + 1
 		} else if (ctx.str[location] == 'n') {
-			return '\n', location + 1, nil
+			return '\n', location + 1
 		} else if (ctx.str[location] == 'r') {
-			return '\r', location + 1, nil
+			return '\r', location + 1
 		} else if (ctx.str[location] == 't') {
-			return '\t', location + 1, nil
+			return '\t', location + 1
 		} else if (ctx.str[location] == 'v') {
-			return '\v', location + 1, nil
+			return '\v', location + 1
 		} else if (ctx.str[location] == '`') {
-			return '`', location + 1, nil
+			return '`', location + 1
 		} else if (ctx.str[location] == '\'') {
-			return '\'', location + 1, nil
+			return '\'', location + 1
 		} else if (ctx.str[location] == '"') {
-			return '"', location + 1, nil
+			return '"', location + 1
 		} else if (ctx.str[location] >= '0' && ctx.str[location] < 3) {
 			if location + 2 >= len(ctx.str) {
-				return 0, location, ctx.NewError(location, "Unexpected end of file in escape sequence")
+				err.Location = location
+				err.Message = "Unexpected end of file in escape sequence"
+				return 0, -1
 			}
 
 			var r rune = 0
@@ -192,11 +204,13 @@ func (ctx *parseContext) parseUnicodeValue(location int) (rune, int, error) {
 				if (ctx.str[location + i] >= '0' && ctx.str[location + i] <= '7') {
 					r = r * 8 + rune(ctx.str[location + i] - '0')
 				} else {
-					return 0, location, ctx.NewError(location, "Invalid character in octal_byte")
+					err.Location = location
+					err.Message = "Invalid character in octal_byte"
+					return 0, -1
 				}
 			}
 
-			return r, location + 3, nil
+			return r, location + 3
 
 		} else if (ctx.str[location] == 'x' || ctx.str[location] == 'u' || ctx.str[location] == 'U') {
 			var l int
@@ -209,7 +223,9 @@ func (ctx *parseContext) parseUnicodeValue(location int) (rune, int, error) {
 			}
 
 			if location + l >= len(ctx.str) {
-				return 0, location, ctx.NewError(location, "Unexpected end of file in escape sequence")
+				err.Location = location
+				err.Message = "Unexpected end of file in escape sequence"
+				return 0, -1
 			}
 
 			location++
@@ -223,30 +239,38 @@ func (ctx *parseContext) parseUnicodeValue(location int) (rune, int, error) {
 				} else if (ctx.str[location + i] >= 'A' && ctx.str[location + i] <= 'F') {
 					r = r * 16 + rune(ctx.str[location + i] - 'A' + 10)
 				} else {
-					return 0, location, ctx.NewError(location, "Illegal character in hex code")
+					err.Location = location
+					err.Message = "Illegal character in hex code"
+					return 0, -1
 				}
 			}
 
 			if !utf8.ValidRune(r) {
-				return 0, location, ctx.NewError(location - 2, "Invalid rune")
+				err.Location = location
+				err.Message = "Invalid rune"
+				return 0, -1
 			}
 
-			return r, location + l, nil
+			return r, location + l
 		} else {
-			return 0, location, ctx.NewError(location, "Invalid escaped char")
+			err.Location = location
+			err.Message = "Invalid escaped char"
+			return 0, -1
 		}
 	} else {
 		r, l := utf8.DecodeRune(ctx.str[location:])
 		if l <= 0 {
-			return 0, location, ctx.NewError(location, "Invalid Unicode character")
+			err.Location = location
+			err.Message = "Invalid Unicode character"
+			return 0, -1
 		}
 
-		return r, location + l, nil
+		return r, location + l
 	}
 }
 
 // Parse Go string and return processed string:
-func (ctx *parseContext) parseString(location int) (string, int, error) {
+func (ctx *parseContext) parseString(location int, err *Error) (string, int) {
 	buf := bytes.NewBuffer(nil)
 	/* Grammar:
 	string_lit             = raw_string_lit | interpreted_string_lit .
@@ -260,7 +284,7 @@ func (ctx *parseContext) parseString(location int) (string, int, error) {
 	if ctx.str[location] == '`' { // raw string
 		for location++; location < len(ctx.str); {
 			if ctx.str[location] == '`' { // End of string
-				return buf.String(), location + 1, nil
+				return buf.String(), location + 1
 			} else if (ctx.str[location] == '\r') { // Skip it
 				location++;
 			} else {
@@ -271,20 +295,22 @@ func (ctx *parseContext) parseString(location int) (string, int, error) {
 	} else if ctx.str[location] == '"' { // interpreted string
 		for location++; location < len(ctx.str); {
 			if ctx.str[location] == '"' {
-				return buf.String(), location + 1, nil
+				return buf.String(), location + 1
 			}
 
-			r, l, err := ctx.parseUnicodeValue(location)
-			if err != nil {
-				return "", l, err
+			r, l := ctx.parseUnicodeValue(location, err)
+			if l < 0 {
+				return "", l
 			}
 
 			if r >= 0x80 && r <= 0xff && l - location == 4 { // TODO: make it better
 				buf.WriteByte(byte(r))
 			} else {
-				_, err = buf.WriteRune(r)
-				if err != nil {
-					return "", location, ctx.NewError(location, "Invalid Rune: %s", err.Error())
+				_, e := buf.WriteRune(r)
+				if e != nil {
+					err.Message = fmt.Sprintf("Invalid Rune: %s", err.Error())
+					err.Location = location
+					return "", -1
 				}
 			}
 
@@ -292,18 +318,20 @@ func (ctx *parseContext) parseString(location int) (string, int, error) {
 		}
 	}
 
-	return "", location, ctx.NewError(location, "Waiting for Go string");
+	err.Message = "Waiting for Go string"
+	err.Location = location
+	return "", -1
 }
 
-func (self *stringParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (int, error) {
-	s, nl, err := ctx.parseString(location)
-	if err != nil {
-		return nl, err
+func (self *stringParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+	s, nl := ctx.parseString(location, err)
+	if nl < 0 {
+		return nl
 	}
 
 	value_of.SetString(s)
 
-	return nl, nil
+	return nl
 }
 
 func (self *stringParser) WriteValue(out io.Writer, value_of reflect.Value) error {
@@ -318,12 +346,14 @@ type literalParser struct {
 	msg     string
 }
 
-func (self *literalParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (int, error) {
+func (self *literalParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	if strAt(ctx.str, location, self.Literal) {
 		value_of.SetString(self.Literal)
-		return location + len(self.Literal), nil
+		return location + len(self.Literal)
 	} else {
-		return location, ctx.NewError(location, self.msg)
+		err.Message = self.msg
+		err.Location = location
+		return -1
 	}
 }
 
@@ -338,23 +368,25 @@ func newLiteralParser(lit string) parser {
 }
 
 // Check if there was overflow for <size> bits type
-func (ctx *parseContext) checkUintOverflow(v uint64, location int, size uint) (uint64, int, error) {
+func (ctx *parseContext) checkUintOverflow(v uint64, location int, size uint) bool {
 	if size >= 64 {
-		return v, location, nil
+		return false
 	}
 
 	if (v >> size) != 0 {
-		return 0, location, ctx.NewError(location, "Integer overflow (%d bits)", size)
+		return true
 	}
 
-	return v, location, nil
+	return false
 }
 
 // Parse uint value and save it in uint64.
 // size is value size in bits.
-func (ctx *parseContext) parseUint64(location int, size uint) (uint64, int, error) {
+func (ctx *parseContext) parseUint64(location int, size uint, err *Error) (uint64, int) {
 	if location >= len(ctx.str) {
-		return 0, location, ctx.NewError(location, "Unexpected end of file. Waiting for integer literal.")
+		err.Message = "Unexpected end of file. Waiting for integer literal."
+		err.Location = location
+		return 0, -1
 	}
 
 	var res uint64 = 0
@@ -363,12 +395,16 @@ func (ctx *parseContext) parseUint64(location int, size uint) (uint64, int, erro
 			location += 2
 
 			if location >= len(ctx.str) {
-				return 0, location, ctx.NewError(location, "Unexpected end of file in hexadecimal literal.")
+				err.Message = "Unexpected end of file in hexadecimal literal."
+				err.Location = location
+				return 0, -1
 			}
 
 			for ; location < len(ctx.str); location++ {
 				if (res & 0xf000000000000000) != 0 {
-					return 0, location, ctx.NewError(location, "Integer overflow")
+					err.Message = "Integer overflow"
+					err.Location = location
+					return 0, -1
 				}
 
 				if (ctx.str[location] >= '0') && (ctx.str[location] <= '9') {
@@ -382,11 +418,19 @@ func (ctx *parseContext) parseUint64(location int, size uint) (uint64, int, erro
 				}
 			}
 
-			return ctx.checkUintOverflow(res, location, size)
+			if ctx.checkUintOverflow(res, location, size) {
+				err.Message = "Integer overflow"
+				err.Location = location
+				return 0, -1
+			} else {
+				return res, location
+			}
 		} else { // OCT
 			for ; location < len(ctx.str); location++ {
 				if (res & 0xe000000000000000) != 0 {
-					return 0, location, ctx.NewError(location, "Integer overflow")
+					err.Message = "Integer overflow"
+					err.Location = location
+					return 0, -1
 				}
 
 				if ctx.str[location] >= '0' && ctx.str[location] <= '7' {
@@ -396,20 +440,30 @@ func (ctx *parseContext) parseUint64(location int, size uint) (uint64, int, erro
 				}
 			}
 
-			return ctx.checkUintOverflow(res, location, size)
+			if ctx.checkUintOverflow(res, location, size) {
+				err.Message = "Integer overflow"
+				err.Location = location
+				return 0, -1
+			} else {
+				return res, location
+			}
 		}
 	} else if ctx.str[location] > '0' && ctx.str[location] <= '9' {
 		var r8 uint64
 		for ; location < len(ctx.str); location++ {
 			if (res & 0xe000000000000000) != 0 {
-				return 0, location, ctx.NewError(location, "Integer overflow")
+				err.Message = "Integer overflow"
+				err.Location = location
+				return 0, -1
 			}
 
 			if ctx.str[location] >= '0' && ctx.str[location] <= '9' {
 				r8 = res << 3 // r8 = res * 8 Here could not be overflow: we have checked this before
 				res = r8 + (res << 1)
 				if res < r8 { // Overflow!
-					return 0, location, ctx.NewError(location, "Integer overflow")
+					err.Message = "Integer overflow"
+					err.Location = location
+					return 0, location
 				}
 
 				res += uint64(ctx.str[location] - '0')
@@ -418,18 +472,27 @@ func (ctx *parseContext) parseUint64(location int, size uint) (uint64, int, erro
 			}
 		}
 
-		return ctx.checkUintOverflow(res, location, size)
+		if ctx.checkUintOverflow(res, location, size) {
+			err.Message = "Integer overflow"
+			err.Location = location
+			return 0, -1
+		} else {
+			return res, location
+		}
 	}
 
-	return 0, location, ctx.NewError(location, "Waiting for integer literal")
+	err.Message = "Waiting for integer literal"
+	err.Location = location
+	return 0, -1
 }
 
 // Parse int value and save it in int64.
 // size is value size in bits.
-func (ctx *parseContext) parseInt64(location int, size uint) (int64, int, error) {
+func (ctx *parseContext) parseInt64(location int, size uint, err *Error) (int64, int) {
 	neg := false
 	if location >= len(ctx.str) {
-		return 0, location, ctx.NewError(location, "Unexpected end of file. Waiting for integer.")
+		err.Message = "Unexpected end of file. Waiting for integer."
+		return 0, -1
 	}
 
 	if ctx.str[location] == '-' {
@@ -439,13 +502,15 @@ func (ctx *parseContext) parseInt64(location int, size uint) (int64, int, error)
 		/* TODO: allow spaces after '-'??? */
 	}
 
-	v, l, err := ctx.parseUint64(location, size)
-	if err != nil {
-		return 0, location, err
+	v, l := ctx.parseUint64(location, size, err)
+	if l < 0 {
+		return 0, l
 	}
 
 	if (v & 0x8000000000000000) != 0 {
-		return 0, location, ctx.NewError(location, "Integer overflow")
+		err.Message = "Integer overflow"
+		err.Location = location
+		return 0, location
 	}
 
 	res := int64(v)
@@ -453,23 +518,27 @@ func (ctx *parseContext) parseInt64(location int, size uint) (int64, int, error)
 		res = -res
 	}
 
-	return res, l, nil
+	return res, l
 }
 
 var floatRegexp *regexp.Regexp = regexp.MustCompile(`^[-+]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][-+]?[0-9]+)?`)
-func (ctx *parseContext) parseFloat(location int, size int) (float64, int, error) {
+func (ctx *parseContext) parseFloat(location int, size int, err *Error) (float64, int) {
 	m := floatRegexp.Find(ctx.str[location:])
 
 	if m == nil {
-		return 0.0, location, ctx.NewError(location, "Waiting for floating point number")
+		err.Message = "Waiting for floating point number"
+		err.Location = location
+		return 0.0, -1
 	}
 
-	r, err := strconv.ParseFloat(string(m), size)
-	if err != nil {
-		return 0.0, location, ctx.NewError(location, "Invalid floating point number")
+	r, e := strconv.ParseFloat(string(m), size)
+	if e != nil {
+		err.Message = "Invalid floating point number"
+		err.Location = location
+		return 0.0, -1
 	}
 
-	return r, location + len(m), nil
+	return r, location + len(m)
 }
 
 type intParser struct {
@@ -484,31 +553,33 @@ type floatParser struct {
 	idHolder
 }
 
-func (self *intParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (int, error) {
+func (self *intParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	if value_of.Type().Bits() == 32 && location < len(ctx.str) && ctx.str[location] == '\'' {
 		location++
-		r, location, err := ctx.parseUnicodeValue(location)
-		if err != nil {
-			return location, err
+		r, location := ctx.parseUnicodeValue(location, err)
+		if location < 0 {
+			return location
 		}
 
 		if location >= len(ctx.str) || ctx.str[location] != '\'' {
-			return location, ctx.NewError(location, "Waiting for closing quote in unicode character")
+			err.Message = "Waiting for closing quote in unicode character"
+			err.Location = location
+			return -1
 		}
 		location++
 
 		value_of.SetInt(int64(r))
 
-		return location, nil
+		return location
 	}
 
-	r, l, err := ctx.parseInt64(location, uint(value_of.Type().Bits()))
-	if err != nil {
-		return location, err
+	r, l := ctx.parseInt64(location, uint(value_of.Type().Bits()), err)
+	if l < 0 {
+		return l
 	}
 
 	value_of.SetInt(r)
-	return l, nil
+	return l
 }
 
 func (self *intParser) WriteValue(out io.Writer, value_of reflect.Value) error {
@@ -516,14 +587,14 @@ func (self *intParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	return err
 }
 
-func (self *uintParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (int, error) {
-	r, l, err := ctx.parseUint64(location, uint(value_of.Type().Bits()))
-	if err != nil {
-		return location, err
+func (self *uintParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+	r, l := ctx.parseUint64(location, uint(value_of.Type().Bits()), err)
+	if l < 0 {
+		return l
 	}
 
 	value_of.SetUint(r)
-	return l, nil
+	return l
 }
 
 func (self *uintParser) WriteValue(out io.Writer, value_of reflect.Value) error {
@@ -531,14 +602,14 @@ func (self *uintParser) WriteValue(out io.Writer, value_of reflect.Value) error 
 	return err
 }
 
-func (self *floatParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (int, error) {
-	r, l, err := ctx.parseFloat(location, value_of.Type().Bits())
-	if err != nil {
-		return location, err
+func (self *floatParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+	r, l := ctx.parseFloat(location, value_of.Type().Bits(), err)
+	if l < 0 {
+		return l
 	}
 
 	value_of.SetFloat(r)
-	return l, nil
+	return l
 }
 
 func (self *floatParser) WriteValue(out io.Writer, value_of reflect.Value) error {
@@ -555,10 +626,9 @@ type field struct {
 	Type   reflect.Type
 }
 
-func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (int, error) {
+func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	var f reflect.Value
 	var l int
-	var err error
 
 	if self.Index < 0 {
 		f = reflect.New(self.Type).Elem()
@@ -567,26 +637,28 @@ func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location
 	}
 
 	if !f.CanSet() {
-		return location, errors.New(fmt.Sprintf("Can't set field '%v.%s'", value_of.Type(), self.Name))
+		panic(fmt.Sprintf("Can't set field '%v.%s'", value_of.Type(), self.Name))
 	}
 
-	l, err = ctx.parse(f, self.Parse, location)
+	l = ctx.parse(f, self.Parse, location, err)
 	if (self.Flags & fieldNotAny) != 0 {
-		if err == nil {
-			return location, ctx.NewError(location, "Unexpected input: %v", self.Parse)
+		if l >= 0 {
+			err.Message = fmt.Sprintf("Unexpected input: %v", self.Parse)
+			err.Location = location
+			return -1
 		}
 
 		// Don't change the location
-		return location, nil
+		return location
 	} else if (self.Flags & fieldFollowedBy) != 0 {
-		if err != nil {
-			return l, err
+		if l < 0 {
+			return l
 		}
 		// Don't change the location
-		return location, nil
+		return location
 	} else {
-		if err != nil {
-			return l, err
+		if l < 0 {
+			return l
 		}
 
 		if self.Set != "" {
@@ -596,30 +668,24 @@ func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location
 			}
 
 			if !method.IsValid() {
-				return location, errors.New(fmt.Sprintf("Can't find `%s' method", self.Set))
+				panic(fmt.Sprintf("Can't find `%s' method", self.Set))
 			}
 
 			mtp := method.Type()
 			if mtp.NumIn() != 1 || mtp.NumOut() != 1 || mtp.In(0) != f.Type() || mtp.Out(0).Name() != "error" {
-				return location, errors.New(fmt.Sprintf("Invalid method `%s' signature. Waiting for func (%v) error", self.Set, self.Parse))
+				panic(fmt.Sprintf("Invalid method `%s' signature. Waiting for func (%v) error", self.Set, self.Parse))
 			}
 
 			resv := method.Call([]reflect.Value{f})[0]
-			if resv.IsNil() {
-				err = nil
-			} else {
-				err = resv.Interface().(error)
-			}
-
-			if err != nil {
-				return location, err
+			if !resv.IsNil() {
+				err.Message = fmt.Sprintf("Set failed: %v", resv.Interface())
+				err.Location = l
+				return -l
 			}
 		}
 
-		return ctx.skipWS(l), nil
+		return ctx.skipWS(l)
 	}
-
-	return -1, errors.New("XXX")
 }
 
 func (self field) WriteValue(out io.Writer, value_of reflect.Value) error {
@@ -668,16 +734,15 @@ type sequenceParser struct {
 	Fields []field
 }
 
-func (self *sequenceParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (int, error) {
-	var err error
+func (self *sequenceParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	for _, f := range(self.Fields) {
-		location, err = f.ParseValue(ctx, value_of, location)
-		if err != nil {
-			return location, err
+		location = f.ParseValue(ctx, value_of, location, err)
+		if location < 0 {
+			return location
 		}
 	}
 
-	return location, nil
+	return location
 }
 
 func (self *sequenceParser) WriteValue(out io.Writer, value_of reflect.Value) error {
@@ -696,30 +761,27 @@ type firstOfParser struct {
 	Fields []field
 }
 
-func (self *firstOfParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (new_loc int, err error) {
+func (self *firstOfParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	max_error := Error{ ctx.str, location - 1, "No choices in first of" }
 	var l int
 
 	for _, f := range(self.Fields) {
-		l, err = f.ParseValue(ctx, value_of, location)
-		if err == nil {
+		l = f.ParseValue(ctx, value_of, location, err)
+		if l >= 0 {
 			value_of.FieldByName("FirstOf").FieldByName("Field").SetString(f.Name)
-			return l, nil
+			return l
 		} else {
-			switch err := err.(type) {
-			case Error:
-				if err.Location > max_error.Location {
-					max_error.Location = err.Location
-					max_error.Str = err.Str
-					max_error.Message = err.Message
-				}
-			default:
-				return l, err
+			if err.Location > max_error.Location {
+				max_error.Location = err.Location
+				max_error.Str = err.Str
+				max_error.Message = err.Message
 			}
 		}
 	}
 
-	return location, max_error
+	err.Message = max_error.Message
+	err.Location = max_error.Location
+	return -1
 }
 
 func (self *firstOfParser) WriteValue(out io.Writer, value_of reflect.Value) error {
@@ -748,7 +810,7 @@ type sliceParser struct {
 	Min       int
 }
 
-func (self *sliceParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (new_loc int, err error) {
+func (self *sliceParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	var v reflect.Value
 
 	value_of.SetLen(0)
@@ -757,17 +819,17 @@ func (self *sliceParser) ParseValue(ctx *parseContext, value_of reflect.Value, l
 		v = reflect.New(tp).Elem()
 		var nl int
 
-		nl, err = ctx.parse(v, self.Parser, location)
-		if err != nil {
+		nl = ctx.parse(v, self.Parser, location, err)
+		if nl < 0 {
 			if value_of.Len() >= self.Min {
-				return location, nil
+				return location
 			}
 
-			return nl, err
+			return nl
 		}
 
 		if nl <= location {
-			return -1, errors.New("Invalid grammar: 0-length member of ZeroOrMore")
+			panic("Invalid grammar: 0-length member of ZeroOrMore")
 		}
 
 		location = nl
@@ -780,7 +842,7 @@ func (self *sliceParser) ParseValue(ctx *parseContext, value_of reflect.Value, l
 				location = ctx.skipWS(nl + len(self.Delimiter))
 			} else {
 				// Here we've got at least one parsed member, so it could not be an error.
-				return nl, nil
+				return nl
 			}
 		}
 	}
@@ -818,25 +880,20 @@ type ptrParser struct {
 	Optional bool
 }
 
-func (self *ptrParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int) (new_loc int, err error) {
+func (self *ptrParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	v := reflect.New(value_of.Type().Elem())
-	nl, err := ctx.parse(v.Elem(), self.Parser, location)
-	if err != nil {
-		switch err.(type) {
-		case Error:
-			if self.Optional {
-				return location, nil
-			} else {
-				return nl, err
-			}
-		default:
-			return nl, err
+	nl := ctx.parse(v.Elem(), self.Parser, location, err)
+	if nl < 0 {
+		if self.Optional {
+			return location
+		} else {
+			return nl
 		}
 	} else {
 		value_of.Set(v)
 	}
 
-	return nl, err
+	return nl
 }
 
 func (self *ptrParser) WriteValue(out io.Writer, value_of reflect.Value) error {
