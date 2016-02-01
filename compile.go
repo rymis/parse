@@ -159,6 +159,9 @@ func compileInternal(type_of reflect.Type, tag reflect.StructTag) (parser, error
 	_lastId++
 	proxy.SetParser(p)
 
+	// It is Ok even if we used p while compiling:
+	_compiledParsers[key] = p
+
 	return p, nil
 }
 
