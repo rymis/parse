@@ -71,6 +71,14 @@ func (self *proxyParser) SetParser(p parser) {
 	self.p = p
 }
 
+func (self *proxyParser) IsTerm() bool {
+	if self.p == nil {
+		panic("nil parser")
+	}
+
+	return self.p.IsTerm()
+}
+
 func appendField(type_of reflect.Type, fields *[]field, idx int) error {
 	f_type := type_of.Field(idx)
 

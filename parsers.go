@@ -29,6 +29,9 @@ type parser interface {
 
 	// Write value to output stream.
 	WriteValue(out io.Writer, value_of reflect.Value) error
+
+	// Check if this parser parses terminal symbol (doesn't contain sub-parsers)
+	IsTerm() bool
 }
 
 // Type that implements first 4 methods for all parsers
@@ -53,10 +56,28 @@ func (self *idHolder) SetString(nm string) {
 	self.name = nm
 }
 
+type terminal struct {
+	terminal bool
+}
+
+type nonTerminal struct {
+	terminal bool
+}
+
+func (self *terminal) IsTerm() bool {
+	return true
+}
+
+func (self *nonTerminal) IsTerm() bool {
+	return false
+}
+
+
 // Parser for Go-like boolean values.
 // Value is 'true' or 'false' with following character from [^a-zA-Z0-9_]
 type boolParser struct {
 	idHolder
+	terminal
 }
 
 var boolError string = "Waiting for boolean value"
@@ -101,6 +122,7 @@ func (self *boolParser) WriteValue(out io.Writer, value_of reflect.Value) error 
 // Parse string matched with regular expression.
 type regexpParser struct {
 	idHolder
+	terminal
 	Regexp *regexp.Regexp
 	err     string
 }
@@ -142,6 +164,7 @@ func newRegexpParser(rx string) (parser, error) {
 // Go string parser.
 type stringParser struct {
 	idHolder
+	terminal
 }
 
 // Parse Go unicode value:
@@ -342,6 +365,7 @@ func (self *stringParser) WriteValue(out io.Writer, value_of reflect.Value) erro
 // Parse specified literal:
 type literalParser struct {
 	idHolder
+	terminal
 	Literal string
 	msg     string
 }
@@ -543,14 +567,17 @@ func (ctx *parseContext) parseFloat(location int, size int, err *Error) (float64
 
 type intParser struct {
 	idHolder
+	terminal
 }
 
 type uintParser struct {
 	idHolder
+	terminal
 }
 
 type floatParser struct {
 	idHolder
+	terminal
 }
 
 func (self *intParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
@@ -731,6 +758,7 @@ const (
 
 type sequenceParser struct {
 	idHolder
+	nonTerminal
 	Fields []field
 }
 
@@ -758,6 +786,7 @@ func (self *sequenceParser) WriteValue(out io.Writer, value_of reflect.Value) er
 
 type firstOfParser struct {
 	idHolder
+	nonTerminal
 	Fields []field
 }
 
@@ -805,6 +834,7 @@ func (self *firstOfParser) WriteValue(out io.Writer, value_of reflect.Value) err
 // Slice parser
 type sliceParser struct {
 	idHolder
+	nonTerminal
 	Parser    parser
 	Delimiter string
 	Min       int
@@ -908,4 +938,7 @@ func (self *ptrParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	return self.Parser.WriteValue(out, value_of.Elem())
 }
 
+func (self *ptrParser) IsTerm() bool {
+	return self.Parser.IsTerm()
+}
 

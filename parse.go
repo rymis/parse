@@ -243,6 +243,10 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 
 	location = ctx.skipWS(location)
 
+	if !ctx.params.PackratEnabled && p.IsTerm() { // Terminal. We don't need to detect left recursion, ...
+		return p.ParseValue(ctx, value_of, location, err)
+	}
+
 	key := packratKey{ p.Id(), location }
 	cache, ok := ctx.packrat[key]
 	if ok {
@@ -325,7 +329,7 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 
 			l := p.ParseValue(ctx, value_of, location, err)
 
-			cache = ctx.packrat[key] // TODO: ???
+			// cache = ctx.packrat[key] // TODO: ???
 			if l < 0 { // This step was not good so we must return previous value
 				cache.parsed = true
 
