@@ -82,7 +82,8 @@ func (self *proxyParser) IsTerm() bool {
 func appendField(type_of reflect.Type, fields *[]field, idx int) error {
 	f_type := type_of.Field(idx)
 
-	if f_type.Tag.Get("skip") == "true" {
+	ptag := f_type.Tag.Get("parse")
+	if ptag == "skip" {
 		// Skipping
 		return nil
 	}
@@ -99,9 +100,9 @@ func appendField(type_of reflect.Type, fields *[]field, idx int) error {
 		fld.Index = -1
 	}
 
-	if f_type.Tag.Get("not_any") == "true" {
+	if ptag == "!" {
 		fld.Flags |= fieldNotAny
-	} else if f_type.Tag.Get("followed_by") == "true" {
+	} else if ptag == "&" {
 		fld.Flags |= fieldFollowedBy
 	}
 
@@ -228,7 +229,7 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 	case reflect.Slice:
 		min := 0
 
-		tmp := tag.Get("repeat")
+		tmp := tag.Get("parse")
 		if tmp == "*" {
 			min = 0
 		} else if tmp == "+" {
@@ -250,7 +251,7 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 			return nil, err
 		}
 
-		return &ptrParser{ Parser: p, Optional: (tag.Get("optional") == "true") }, nil
+		return &ptrParser{ Parser: p, Optional: (tag.Get("parse") == "?") }, nil
 	default:
 		return nil, errors.New(fmt.Sprintf("Invalid argument for Compile: unsupported type '%v'", type_of))
 	}

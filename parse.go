@@ -62,9 +62,9 @@ will be parsed as ELEMENT* or ELEMENT+ (if `repeat:"+"` was set in tag). You can
 	+-------------+-------------+----------------------------------------------------+
 	| bool        |             | Parse boolean constant (true or false)             |
 	+-------------+-------------+----------------------------------------------------+
-	| []type      | repeat      | Parse sequence of type. If repeat is not specified |
-	|             |             | or repeat is '*' here could be zero or more        |
-	|             |             | elements. If repeat is '+' here could be one or    |
+	| []type      | parse       | Parse sequence of type. If parse is not specified  |
+	|             |             | or parse is '*' here could be zero or more         |
+	|             |             | elements. If parse is '+' here could be one or     |
 	|             |             | more elements.                                     |
 	+-------------+-------------+----------------------------------------------------+
 	| []type      | delimiter   | Parse list with delimiter literal. It is very      |
@@ -72,23 +72,21 @@ will be parsed as ELEMENT* or ELEMENT+ (if `repeat:"+"` was set in tag). You can
 	|             |             | like lists so I think that it is good idea to      |
 	|             |             | support such lists out of the box.                 |
 	+-------------+-------------+----------------------------------------------------+
-	| *type       | optional    | Parse type. Element will be allocated or set to nil|
+	| *type       | parse       | Parse type. Element will be allocated or set to nil|
 	|             |             | for optional elements that doesn't present. If     |
-	|             |             | optional specified and set to 'true' element is    |
+	|             |             | parse was specified and set to '?' element is      |
 	|             |             | optional: if it is not present in the input field  |
 	|             |             | will be nil.                                       |
 	+-------------+-------------+----------------------------------------------------+
-	| any         | followed_by | Element will be parsed but position will not be    |
-	|             |             | increased if this tag present and set to 'true'.   |
-	+-------------+-------------+----------------------------------------------------+
-	| any         | not_any     | Element must not be present at this position. If   |
-	|             |             | it parsed then error'll be returned.               |
+	| any         | parse       | If parse == "skip" field will be skipped while     |
+	|             |             | parsing or encoding. If parse == "&" it is followed|
+	|             |             | by element: it will be parsed but position will not|
+	|             |             | be increased. If parse == "!" it is not predicate: |
+	|             |             | element must not be present at this position.      |
 	+-------------+-------------+----------------------------------------------------+
 	| any         | set         | If present this tag contains name of the method to |
 	|             |             | call after parsing of element. Method must have    |
 	|             |             | signature func (x element-type) error.             |
-	+-------------+-------------+----------------------------------------------------+
-	| any         | skip        | If set to true field will be skipped while parsing |
 	+-------------+-------------+----------------------------------------------------+
 
 Parser supports left recursion out of the box so you can parse expressions without a problem. For example you can parse this grammar:

@@ -8,7 +8,7 @@ import (
 type tmp struct {
 	A string `regexp:"[hH]ello"`
 	_ string `literal:","`
-	_ *string `set:"Set_w" optional:"true" regexp:"[wW]orld"`
+	_ *string `set:"Set_w" parse:"?" regexp:"[wW]orld"`
 	w string
 }
 
@@ -52,7 +52,7 @@ type mexpression struct {
 	Rest []struct {
 		Op string `regexp:"[*%/]"`
 		Arg atom
-	} `repeat: "*"`
+	} `parse: "*"`
 }
 
 func (self mexpression) p() {
@@ -71,7 +71,7 @@ type expression struct {
 	Rest []struct {
 		Op string `regexp:"[-+]"`
 		Arg mexpression
-	} `repeat: "*"`
+	} `parse: "*"`
 }
 
 func (self expression) p() {
@@ -96,28 +96,28 @@ type abc_S struct {
 	_ struct {
 		A abc_A
 		C string `regexp:"c"`
-	} `followed_by:"true"`
+	} `parse:"&"`
 	A []struct {
 		A string `regexp:"a"`
-	} `repeat:"+"`
+	} `parse:"+"`
 	B abc_B
 	_ struct {
 		FirstOf
 		A string `regexp:"a"`
 		B string `regexp:"b"`
 		C string `regexp:"c"`
-	} `not_any:"true"`
+	} `parse:"!"`
 }
 
 type abc_A struct {
 	A string `regexp:"a"`
-	A1 *abc_A `optional:"true"`
+	A1 *abc_A `parse:"?"`
 	B string `regexp:"b"`
 }
 
 type abc_B struct {
 	B string `regexp:"b"`
-	B1 *abc_B `optional:"true"`
+	B1 *abc_B `parse:"?"`
 	C string `regexp:"c"`
 }
 

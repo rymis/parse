@@ -28,7 +28,7 @@ type MUL_1 struct {
 	Arg *struct {
 		Op   string `regexp:"[/%*]"`
 		Atom ATOM
-	} `optional:"true"`
+	} `parse:"?"`
 }
 
 type MUL struct {
@@ -66,7 +66,7 @@ type EXPR_1 struct {
 	Arg *struct {
 		Op   string `regexp:"[-+]"`
 		Mul  MUL
-	} `optional:"true"`
+	} `parse:"?"`
 }
 
 type EXPR struct {

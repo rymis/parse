@@ -14,9 +14,9 @@ type white struct {
 }
 
 type config struct {
-	Sections []section `repeat:"*"`
+	Sections []section `parse:"*"`
 	W          white
-//	Eof        string `not_any:"true" regexp:".|\\n"`
+//	Eof        string `parse:"!" regexp:".|\\n"`
 }
 
 type section struct {
