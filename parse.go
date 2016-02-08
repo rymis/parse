@@ -241,7 +241,7 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 
 	location = ctx.skipWS(location)
 
-	if !ctx.params.PackratEnabled && p.IsTerm() { // Terminal. We don't need to detect left recursion, ...
+	if !ctx.params.PackratEnabled && p.IsLR() > 0 { // We don't need to detect left recursion, ...
 		return p.ParseValue(ctx, value_of, location, err)
 	}
 

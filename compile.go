@@ -79,6 +79,30 @@ func (self *proxyParser) IsTerm() bool {
 	return self.p.IsTerm()
 }
 
+func (self *proxyParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	if self.p == nil {
+		panic("nil parser")
+	}
+
+	return self.p.IsLRPossible(parsers)
+}
+
+func (self *proxyParser) IsLR() int {
+	if self.p == nil {
+		panic("nil parser")
+	}
+
+	return self.p.IsLR()
+}
+
+func (self *proxyParser) SetLR(v int) {
+	if self.p == nil {
+		panic("nil parser")
+	}
+
+	self.p.SetLR(v)
+}
+
 func appendField(type_of reflect.Type, fields *[]field, idx int) error {
 	f_type := type_of.Field(idx)
 
@@ -136,7 +160,13 @@ func compile(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
 	_compileMutex.Lock()
 	defer _compileMutex.Unlock()
 
-	return compileInternal(type_of, tag)
+	p, err := compileInternal(type_of, tag)
+	if err != nil {
+		return nil, err
+	}
+
+	isLRPossible(p, make(map[uint]bool))
+	return p, nil
 }
 
 func compileInternal(type_of reflect.Type, tag reflect.StructTag) (parser, error) {

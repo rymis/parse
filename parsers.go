@@ -32,12 +32,45 @@ type parser interface {
 
 	// Check if this parser parses terminal symbol (doesn't contain sub-parsers)
 	IsTerm() bool
+
+	// Check possibility of left recursion.
+	// This function must add all parsers with offset 0 to the set of parsers and
+	// return two values: is left recursion possible (and if possible execution will be stopped)
+	// and could parser parse empty value.
+	IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool)
+
+	// Check if rule left recursive:
+	IsLR() int
+	// Set LR state:
+	SetLR(v int)
+}
+
+// Utility function to call IsLRPossible
+func isLRPossible(p parser, parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	lr := p.IsLR()
+	if lr < 0 {
+		possible = true
+		return
+	} else if lr > 0 {
+		possible = false
+		return
+	}
+	if parsers[p.Id()] { // Left recursion detected
+		p.SetLR(-1)
+		possible = true
+		return
+	}
+
+	parsers[p.Id()] = true
+
+	return p.IsLRPossible(parsers)
 }
 
 // Type that implements first 4 methods for all parsers
 type idHolder struct {
 	id uint
 	name string
+	lr int
 }
 
 func (self *idHolder) SetId(id uint) {
@@ -54,6 +87,14 @@ func (self *idHolder) String() string {
 
 func (self *idHolder) SetString(nm string) {
 	self.name = nm
+}
+
+func (self *idHolder) IsLR() int {
+	return self.lr
+}
+
+func (self *idHolder) SetLR(v int) {
+	self.lr = v
 }
 
 type terminal struct {
@@ -119,6 +160,10 @@ func (self *boolParser) WriteValue(out io.Writer, value_of reflect.Value) error 
 	return err
 }
 
+func (self *boolParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	return false, false
+}
+
 // Parse string matched with regular expression.
 type regexpParser struct {
 	idHolder
@@ -148,6 +193,10 @@ func (self *regexpParser) WriteValue(out io.Writer, value_of reflect.Value) erro
 	}
 
 	return errors.New(fmt.Sprintf("String `%s' does not match regular expression %v", s, self.Regexp))
+}
+
+func (self *regexpParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	return false, self.Regexp.MatchString("")
 }
 
 func newRegexpParser(rx string) (parser, error) {
@@ -362,6 +411,10 @@ func (self *stringParser) WriteValue(out io.Writer, value_of reflect.Value) erro
 	return err
 }
 
+func (self *stringParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	return false, false
+}
+
 // Parse specified literal:
 type literalParser struct {
 	idHolder
@@ -384,6 +437,10 @@ func (self *literalParser) ParseValue(ctx *parseContext, value_of reflect.Value,
 func (self *literalParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	_, err := out.Write([]byte(self.Literal))
 	return err
+}
+
+func (self *literalParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	return false, len(self.Literal) == 0
 }
 
 func newLiteralParser(lit string) parser {
@@ -614,6 +671,10 @@ func (self *intParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	return err
 }
 
+func (self *intParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	return false, false
+}
+
 func (self *uintParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	r, l := ctx.parseUint64(location, uint(value_of.Type().Bits()), err)
 	if l < 0 {
@@ -629,6 +690,10 @@ func (self *uintParser) WriteValue(out io.Writer, value_of reflect.Value) error 
 	return err
 }
 
+func (self *uintParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	return false, false
+}
+
 func (self *floatParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	r, l := ctx.parseFloat(location, value_of.Type().Bits(), err)
 	if l < 0 {
@@ -642,6 +707,10 @@ func (self *floatParser) ParseValue(ctx *parseContext, value_of reflect.Value, l
 func (self *floatParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	_, err := out.Write(strconv.AppendFloat(nil, value_of.Float(), 'e', -1, value_of.Type().Bits()))
 	return err
+}
+
+func (self *floatParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	return false, false
 }
 
 type field struct {
@@ -715,6 +784,19 @@ func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location
 	}
 }
 
+func (self field) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	possible, can_parse_empty = isLRPossible(self.Parse, parsers)
+	if possible {
+		return
+	}
+
+	if (self.Flags & (fieldNotAny | fieldFollowedBy)) != 0 {
+		can_parse_empty = true
+	}
+
+	return
+}
+
 func (self field) WriteValue(out io.Writer, value_of reflect.Value) error {
 	if (self.Flags & (fieldNotAny | fieldFollowedBy)) != 0 {
 		return nil
@@ -784,6 +866,24 @@ func (self *sequenceParser) WriteValue(out io.Writer, value_of reflect.Value) er
 	return nil
 }
 
+func (self *sequenceParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	for _, f := range(self.Fields) {
+		p, can := f.IsLRPossible(parsers)
+		if p {
+			// Recursion has been found:
+			return p, can
+		}
+
+		// There could not be left recursion: can not parse empty prefix.
+		if !can {
+			return false, false
+		}
+	}
+
+	// Here could not be recusive call but structure could parse emptry string
+	return false, true
+}
+
 type firstOfParser struct {
 	idHolder
 	nonTerminal
@@ -829,6 +929,25 @@ func (self *firstOfParser) WriteValue(out io.Writer, value_of reflect.Value) err
 	}
 
 	return errors.New(fmt.Sprintf("Field `%s' is not present in %v", nm, value_of.Type()))
+}
+
+func (self *firstOfParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	can_parse_empty = false
+	possible = false
+
+	for _, f := range(self.Fields) {
+		p, can := f.IsLRPossible(parsers)
+		if p {
+			possible = true
+			return
+		}
+
+		if can {
+			can_parse_empty = true
+		}
+	}
+
+	return
 }
 
 // Slice parser
@@ -903,6 +1022,15 @@ func (self *sliceParser) WriteValue(out io.Writer, value_of reflect.Value) error
 	return nil
 }
 
+func (self *sliceParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	possible, can_parse_empty = isLRPossible(self.Parser, parsers)
+	if self.Min == 0 {
+		can_parse_empty = true
+	}
+
+	return
+}
+
 // Ptr
 type ptrParser struct {
 	idHolder
@@ -936,6 +1064,19 @@ func (self *ptrParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	}
 
 	return self.Parser.WriteValue(out, value_of.Elem())
+}
+
+func (self *ptrParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+	possible, can_parse_empty = isLRPossible(self.Parser, parsers)
+	if possible {
+		return
+	}
+
+	if self.Optional {
+		can_parse_empty = true
+	}
+
+	return
 }
 
 func (self *ptrParser) IsTerm() bool {
