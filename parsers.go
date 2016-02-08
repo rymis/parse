@@ -68,6 +68,8 @@ func isLRPossible(p parser, parsers []parser) (possible bool, can_parse_empty bo
 	if possible {
 		p.SetLR(-1)
 		return
+	} else {
+		p.SetLR(1)
 	}
 
 	return
