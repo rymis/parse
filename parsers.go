@@ -37,7 +37,7 @@ type parser interface {
 	// This function must add all parsers with offset 0 to the set of parsers and
 	// return two values: is left recursion possible (and if possible execution will be stopped)
 	// and could parser parse empty value.
-	IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool)
+	IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool)
 
 	// Check if rule left recursive:
 	IsLR() int
@@ -46,7 +46,7 @@ type parser interface {
 }
 
 // Utility function to call IsLRPossible
-func isLRPossible(p parser, parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func isLRPossible(p parser, parsers []parser) (possible bool, can_parse_empty bool) {
 	lr := p.IsLR()
 	if lr < 0 {
 		possible = true
@@ -55,15 +55,22 @@ func isLRPossible(p parser, parsers map[uint]bool) (possible bool, can_parse_emp
 		possible = false
 		return
 	}
-	if parsers[p.Id()] { // Left recursion detected
+
+	for _, t := range(parsers) {
+		if t.Id() == p.Id() {
+			p.SetLR(-1)
+			possible = true
+			return
+		}
+	}
+
+	possible, can_parse_empty = p.IsLRPossible(append(parsers, p))
+	if possible {
 		p.SetLR(-1)
-		possible = true
 		return
 	}
 
-	parsers[p.Id()] = true
-
-	return p.IsLRPossible(parsers)
+	return
 }
 
 // Type that implements first 4 methods for all parsers
@@ -160,7 +167,7 @@ func (self *boolParser) WriteValue(out io.Writer, value_of reflect.Value) error 
 	return err
 }
 
-func (self *boolParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *boolParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	return false, false
 }
 
@@ -195,7 +202,7 @@ func (self *regexpParser) WriteValue(out io.Writer, value_of reflect.Value) erro
 	return errors.New(fmt.Sprintf("String `%s' does not match regular expression %v", s, self.Regexp))
 }
 
-func (self *regexpParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *regexpParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	return false, self.Regexp.MatchString("")
 }
 
@@ -411,7 +418,7 @@ func (self *stringParser) WriteValue(out io.Writer, value_of reflect.Value) erro
 	return err
 }
 
-func (self *stringParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *stringParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	return false, false
 }
 
@@ -439,7 +446,7 @@ func (self *literalParser) WriteValue(out io.Writer, value_of reflect.Value) err
 	return err
 }
 
-func (self *literalParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *literalParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	return false, len(self.Literal) == 0
 }
 
@@ -671,7 +678,7 @@ func (self *intParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	return err
 }
 
-func (self *intParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *intParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	return false, false
 }
 
@@ -690,7 +697,7 @@ func (self *uintParser) WriteValue(out io.Writer, value_of reflect.Value) error 
 	return err
 }
 
-func (self *uintParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *uintParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	return false, false
 }
 
@@ -709,7 +716,7 @@ func (self *floatParser) WriteValue(out io.Writer, value_of reflect.Value) error
 	return err
 }
 
-func (self *floatParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *floatParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	return false, false
 }
 
@@ -784,7 +791,7 @@ func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location
 	}
 }
 
-func (self field) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self field) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	possible, can_parse_empty = isLRPossible(self.Parse, parsers)
 	if possible {
 		return
@@ -866,7 +873,7 @@ func (self *sequenceParser) WriteValue(out io.Writer, value_of reflect.Value) er
 	return nil
 }
 
-func (self *sequenceParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *sequenceParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	for _, f := range(self.Fields) {
 		p, can := f.IsLRPossible(parsers)
 		if p {
@@ -931,7 +938,7 @@ func (self *firstOfParser) WriteValue(out io.Writer, value_of reflect.Value) err
 	return errors.New(fmt.Sprintf("Field `%s' is not present in %v", nm, value_of.Type()))
 }
 
-func (self *firstOfParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *firstOfParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	can_parse_empty = false
 	possible = false
 
@@ -1022,7 +1029,7 @@ func (self *sliceParser) WriteValue(out io.Writer, value_of reflect.Value) error
 	return nil
 }
 
-func (self *sliceParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *sliceParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	possible, can_parse_empty = isLRPossible(self.Parser, parsers)
 	if self.Min == 0 {
 		can_parse_empty = true
@@ -1066,7 +1073,7 @@ func (self *ptrParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	return self.Parser.WriteValue(out, value_of.Elem())
 }
 
-func (self *ptrParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *ptrParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	possible, can_parse_empty = isLRPossible(self.Parser, parsers)
 	if possible {
 		return

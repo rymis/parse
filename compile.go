@@ -79,7 +79,7 @@ func (self *proxyParser) IsTerm() bool {
 	return self.p.IsTerm()
 }
 
-func (self *proxyParser) IsLRPossible(parsers map[uint]bool) (possible bool, can_parse_empty bool) {
+func (self *proxyParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
 	if self.p == nil {
 		panic("nil parser")
 	}
@@ -165,7 +165,7 @@ func compile(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
 		return nil, err
 	}
 
-	isLRPossible(p, make(map[uint]bool))
+	isLRPossible(p, nil)
 	return p, nil
 }
 
