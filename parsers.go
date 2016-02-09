@@ -722,6 +722,25 @@ func (self *floatParser) IsLRPossible(parsers []parser) (possible bool, can_pars
 	return false, false
 }
 
+// This parser only saves location
+type locationParser struct {
+	idHolder
+	terminal
+}
+
+func (self *locationParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+	value_of.SetInt(int64(location))
+	return location
+}
+
+func (self *locationParser) WriteValue(out io.Writer, value_of reflect.Value) error {
+	return nil
+}
+
+func (self *locationParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+	return false, true
+}
+
 type field struct {
 	Name   string
 	Index  int

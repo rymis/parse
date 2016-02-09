@@ -9,6 +9,7 @@ type tmp struct {
 	A string `regexp:"[hH]ello"`
 	_ string `literal:","`
 	_ *string `set:"Set_w" parse:"?" regexp:"[wW]orld"`
+	Loc int   `parse:"#"`
 	w string
 }
 

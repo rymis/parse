@@ -56,6 +56,9 @@ will be parsed as ELEMENT* or ELEMENT+ (if `repeat:"+"` was set in tag). You can
 	|             |             | are the same type in Go, so int32 parse characters |
 	|             |             | in Go syntax.                                      |
 	+-------------+-------------+----------------------------------------------------+
+	| int*        | parse       | If tag parse:"#" was set parser will save current  |
+	|             |             | location in this field and will not advance one.   |
+	+-------------+-------------+----------------------------------------------------+
 	| uint*       |             | Same as int* but unsigned constant.                |
 	+-------------+-------------+----------------------------------------------------+
 	| float*      |             | Parse floating point number.                       |

@@ -243,6 +243,11 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 		return nil, errors.New("XXX")
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		opt := tag.Get("parse")
+		if opt == "#" {
+			return &locationParser{}, nil
+		}
+
 		return &intParser{ }, nil
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
