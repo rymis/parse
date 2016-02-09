@@ -1,14 +1,14 @@
 package parse
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"reflect"
-	"fmt"
 	"regexp"
-	"unicode/utf8"
-	"bytes"
 	"strconv"
-	"errors"
+	"unicode/utf8"
 )
 
 // Actual parsers for Go types. Parsers for Struct, Slice and Ptr are placed in compile.go.
@@ -56,7 +56,7 @@ func isLRPossible(p parser, parsers []parser) (possible bool, can_parse_empty bo
 		return
 	}
 
-	for _, t := range(parsers) {
+	for _, t := range parsers {
 		if t.Id() == p.Id() {
 			p.SetLR(-1)
 			possible = true
@@ -77,9 +77,9 @@ func isLRPossible(p parser, parsers []parser) (possible bool, can_parse_empty bo
 
 // Type that implements first 4 methods for all parsers
 type idHolder struct {
-	id uint
+	id   uint
 	name string
-	lr int
+	lr   int
 }
 
 func (self *idHolder) SetId(id uint) {
@@ -122,7 +122,6 @@ func (self *nonTerminal) IsTerm() bool {
 	return false
 }
 
-
 // Parser for Go-like boolean values.
 // Value is 'true' or 'false' with following character from [^a-zA-Z0-9_]
 type boolParser struct {
@@ -131,6 +130,7 @@ type boolParser struct {
 }
 
 var boolError string = "Waiting for boolean value"
+
 func (self *boolParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
 	if strAt(ctx.str, location, "true") {
 		value_of.SetBool(true)
@@ -178,7 +178,7 @@ type regexpParser struct {
 	idHolder
 	terminal
 	Regexp *regexp.Regexp
-	err     string
+	err    string
 }
 
 func (self *regexpParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
@@ -216,7 +216,7 @@ func newRegexpParser(rx string) (parser, error) {
 
 	msg := fmt.Sprintf("Waiting for /%s/", rx)
 
-	return &regexpParser{ Regexp: r, err: msg }, nil
+	return &regexpParser{Regexp: r, err: msg}, nil
 }
 
 // Go string parser.
@@ -228,14 +228,14 @@ type stringParser struct {
 // Parse Go unicode value:
 func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int) {
 	/*
-	unicode_value    = unicode_char | little_u_value | big_u_value | escaped_char .
-	byte_value       = octal_byte_value | hex_byte_value .
-	octal_byte_value = `\` octal_digit octal_digit octal_digit .
-	hex_byte_value   = `\` "x" hex_digit hex_digit .
-	little_u_value   = `\` "u" hex_digit hex_digit hex_digit hex_digit .
-	big_u_value      = `\` "U" hex_digit hex_digit hex_digit hex_digit
-	                           hex_digit hex_digit hex_digit hex_digit .
-				   escaped_char     = `\` ( "a" | "b" | "f" | "n" | "r" | "t" | "v" | `\` | "'" | `"` ) .
+		unicode_value    = unicode_char | little_u_value | big_u_value | escaped_char .
+		byte_value       = octal_byte_value | hex_byte_value .
+		octal_byte_value = `\` octal_digit octal_digit octal_digit .
+		hex_byte_value   = `\` "x" hex_digit hex_digit .
+		little_u_value   = `\` "u" hex_digit hex_digit hex_digit hex_digit .
+		big_u_value      = `\` "U" hex_digit hex_digit hex_digit hex_digit
+		                           hex_digit hex_digit hex_digit hex_digit .
+					   escaped_char     = `\` ( "a" | "b" | "f" | "n" | "r" | "t" | "v" | `\` | "'" | `"` ) .
 	*/
 	if location >= len(ctx.str) {
 		err.Location = location
@@ -251,30 +251,30 @@ func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int)
 			return 0, -1
 		}
 
-		if (ctx.str[location] == '\\') {
+		if ctx.str[location] == '\\' {
 			return '\\', location + 1
-		} else if (ctx.str[location] == 'a') {
+		} else if ctx.str[location] == 'a' {
 			return '\a', location + 1
-		} else if (ctx.str[location] == 'b') {
+		} else if ctx.str[location] == 'b' {
 			return '\b', location + 1
-		} else if (ctx.str[location] == 'f') {
+		} else if ctx.str[location] == 'f' {
 			return '\f', location + 1
-		} else if (ctx.str[location] == 'n') {
+		} else if ctx.str[location] == 'n' {
 			return '\n', location + 1
-		} else if (ctx.str[location] == 'r') {
+		} else if ctx.str[location] == 'r' {
 			return '\r', location + 1
-		} else if (ctx.str[location] == 't') {
+		} else if ctx.str[location] == 't' {
 			return '\t', location + 1
-		} else if (ctx.str[location] == 'v') {
+		} else if ctx.str[location] == 'v' {
 			return '\v', location + 1
-		} else if (ctx.str[location] == '`') {
+		} else if ctx.str[location] == '`' {
 			return '`', location + 1
-		} else if (ctx.str[location] == '\'') {
+		} else if ctx.str[location] == '\'' {
 			return '\'', location + 1
-		} else if (ctx.str[location] == '"') {
+		} else if ctx.str[location] == '"' {
 			return '"', location + 1
-		} else if (ctx.str[location] >= '0' && ctx.str[location] < 3) {
-			if location + 2 >= len(ctx.str) {
+		} else if ctx.str[location] >= '0' && ctx.str[location] < 3 {
+			if location+2 >= len(ctx.str) {
 				err.Location = location
 				err.Message = "Unexpected end of file in escape sequence"
 				return 0, -1
@@ -282,8 +282,8 @@ func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int)
 
 			var r rune = 0
 			for i := 0; i < 3; i++ {
-				if (ctx.str[location + i] >= '0' && ctx.str[location + i] <= '7') {
-					r = r * 8 + rune(ctx.str[location + i] - '0')
+				if ctx.str[location+i] >= '0' && ctx.str[location+i] <= '7' {
+					r = r*8 + rune(ctx.str[location+i]-'0')
 				} else {
 					err.Location = location
 					err.Message = "Invalid character in octal_byte"
@@ -293,7 +293,7 @@ func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int)
 
 			return r, location + 3
 
-		} else if (ctx.str[location] == 'x' || ctx.str[location] == 'u' || ctx.str[location] == 'U') {
+		} else if ctx.str[location] == 'x' || ctx.str[location] == 'u' || ctx.str[location] == 'U' {
 			var l int
 			if ctx.str[location] == 'x' {
 				l = 2
@@ -303,7 +303,7 @@ func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int)
 				l = 8
 			}
 
-			if location + l >= len(ctx.str) {
+			if location+l >= len(ctx.str) {
 				err.Location = location
 				err.Message = "Unexpected end of file in escape sequence"
 				return 0, -1
@@ -313,12 +313,12 @@ func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int)
 
 			var r rune = 0
 			for i := 0; i < l; i++ {
-				if (ctx.str[location + i] >= '0' && ctx.str[location + i] <= '9') {
-					r = r * 16 + rune(ctx.str[location + i] - '0')
-				} else if (ctx.str[location + i] >= 'a' && ctx.str[location + i] <= 'f') {
-					r = r * 16 + rune(ctx.str[location + i] - 'a' + 10)
-				} else if (ctx.str[location + i] >= 'A' && ctx.str[location + i] <= 'F') {
-					r = r * 16 + rune(ctx.str[location + i] - 'A' + 10)
+				if ctx.str[location+i] >= '0' && ctx.str[location+i] <= '9' {
+					r = r*16 + rune(ctx.str[location+i]-'0')
+				} else if ctx.str[location+i] >= 'a' && ctx.str[location+i] <= 'f' {
+					r = r*16 + rune(ctx.str[location+i]-'a'+10)
+				} else if ctx.str[location+i] >= 'A' && ctx.str[location+i] <= 'F' {
+					r = r*16 + rune(ctx.str[location+i]-'A'+10)
 				} else {
 					err.Location = location
 					err.Message = "Illegal character in hex code"
@@ -366,11 +366,11 @@ func (ctx *parseContext) parseString(location int, err *Error) (string, int) {
 		for location++; location < len(ctx.str); {
 			if ctx.str[location] == '`' { // End of string
 				return buf.String(), location + 1
-			} else if (ctx.str[location] == '\r') { // Skip it
-				location++;
+			} else if ctx.str[location] == '\r' { // Skip it
+				location++
 			} else {
 				buf.WriteByte(ctx.str[location])
-				location++;
+				location++
 			}
 		}
 	} else if ctx.str[location] == '"' { // interpreted string
@@ -384,7 +384,7 @@ func (ctx *parseContext) parseString(location int, err *Error) (string, int) {
 				return "", l
 			}
 
-			if r >= 0x80 && r <= 0xff && l - location == 4 { // TODO: make it better
+			if r >= 0x80 && r <= 0xff && l-location == 4 { // TODO: make it better
 				buf.WriteByte(byte(r))
 			} else {
 				_, e := buf.WriteRune(r)
@@ -454,7 +454,7 @@ func (self *literalParser) IsLRPossible(parsers []parser) (possible bool, can_pa
 
 func newLiteralParser(lit string) parser {
 	msg := fmt.Sprintf("Waiting for '%s'", lit)
-	return &literalParser{ Literal: lit, msg: msg }
+	return &literalParser{Literal: lit, msg: msg}
 }
 
 // Check if there was overflow for <size> bits type
@@ -481,7 +481,7 @@ func (ctx *parseContext) parseUint64(location int, size uint, err *Error) (uint6
 
 	var res uint64 = 0
 	if ctx.str[location] == '0' {
-		if location + 1 < len(ctx.str) && (ctx.str[location + 1] == 'x' || ctx.str[location + 1] == 'X') { // HEX
+		if location+1 < len(ctx.str) && (ctx.str[location+1] == 'x' || ctx.str[location+1] == 'X') { // HEX
 			location += 2
 
 			if location >= len(ctx.str) {
@@ -498,11 +498,11 @@ func (ctx *parseContext) parseUint64(location int, size uint, err *Error) (uint6
 				}
 
 				if (ctx.str[location] >= '0') && (ctx.str[location] <= '9') {
-					res = (res << 4) + uint64(ctx.str[location] - '0')
+					res = (res << 4) + uint64(ctx.str[location]-'0')
 				} else if (ctx.str[location] >= 'a') && (ctx.str[location] <= 'f') {
-					res = (res << 4) + uint64(ctx.str[location] - 'a') + 10
+					res = (res << 4) + uint64(ctx.str[location]-'a') + 10
 				} else if (ctx.str[location] >= 'A') && (ctx.str[location] <= 'F') {
-					res = (res << 4) + uint64(ctx.str[location] - 'A') + 10
+					res = (res << 4) + uint64(ctx.str[location]-'A') + 10
 				} else {
 					break
 				}
@@ -524,7 +524,7 @@ func (ctx *parseContext) parseUint64(location int, size uint, err *Error) (uint6
 				}
 
 				if ctx.str[location] >= '0' && ctx.str[location] <= '7' {
-					res = (res << 3) + uint64(ctx.str[location] - '0')
+					res = (res << 3) + uint64(ctx.str[location]-'0')
 				} else {
 					break
 				}
@@ -612,6 +612,7 @@ func (ctx *parseContext) parseInt64(location int, size uint, err *Error) (int64,
 }
 
 var floatRegexp *regexp.Regexp = regexp.MustCompile(`^[-+]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][-+]?[0-9]+)?`)
+
 func (ctx *parseContext) parseFloat(location int, size int, err *Error) (float64, int) {
 	m := floatRegexp.Find(ctx.str[location:])
 
@@ -742,12 +743,12 @@ func (self *locationParser) IsLRPossible(parsers []parser) (possible bool, can_p
 }
 
 type field struct {
-	Name   string
-	Index  int
-	Parse  parser
-	Flags  uint
-	Set    string
-	Type   reflect.Type
+	Name  string
+	Index int
+	Parse parser
+	Flags uint
+	Set   string
+	Type  reflect.Type
 }
 
 func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
@@ -873,7 +874,7 @@ type sequenceParser struct {
 }
 
 func (self *sequenceParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	for _, f := range(self.Fields) {
+	for _, f := range self.Fields {
 		location = f.ParseValue(ctx, value_of, location, err)
 		if location < 0 {
 			return location
@@ -885,7 +886,7 @@ func (self *sequenceParser) ParseValue(ctx *parseContext, value_of reflect.Value
 
 func (self *sequenceParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	var err error
-	for _, f := range(self.Fields) {
+	for _, f := range self.Fields {
 		err = f.WriteValue(out, value_of)
 		if err != nil {
 			return err
@@ -895,7 +896,7 @@ func (self *sequenceParser) WriteValue(out io.Writer, value_of reflect.Value) er
 }
 
 func (self *sequenceParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
-	for _, f := range(self.Fields) {
+	for _, f := range self.Fields {
 		p, can := f.IsLRPossible(parsers)
 		if p {
 			// Recursion has been found:
@@ -919,10 +920,10 @@ type firstOfParser struct {
 }
 
 func (self *firstOfParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	max_error := Error{ ctx.str, location - 1, "No choices in first of" }
+	max_error := Error{ctx.str, location - 1, "No choices in first of"}
 	var l int
 
-	for _, f := range(self.Fields) {
+	for _, f := range self.Fields {
 		l = f.ParseValue(ctx, value_of, location, err)
 		if l >= 0 {
 			value_of.FieldByName("FirstOf").FieldByName("Field").SetString(f.Name)
@@ -949,7 +950,7 @@ func (self *firstOfParser) WriteValue(out io.Writer, value_of reflect.Value) err
 		return errors.New("Field is not selected in FirstOf")
 	}
 
-	for _, f := range(self.Fields) {
+	for _, f := range self.Fields {
 		if f.Name == nm {
 			err = f.WriteValue(out, value_of)
 			return err
@@ -963,7 +964,7 @@ func (self *firstOfParser) IsLRPossible(parsers []parser) (possible bool, can_pa
 	can_parse_empty = false
 	possible = false
 
-	for _, f := range(self.Fields) {
+	for _, f := range self.Fields {
 		p, can := f.IsLRPossible(parsers)
 		if p {
 			possible = true
@@ -1062,7 +1063,7 @@ func (self *sliceParser) IsLRPossible(parsers []parser) (possible bool, can_pars
 // Ptr
 type ptrParser struct {
 	idHolder
-	Parser parser
+	Parser   parser
 	Optional bool
 }
 
@@ -1110,4 +1111,3 @@ func (self *ptrParser) IsLRPossible(parsers []parser) (possible bool, can_parse_
 func (self *ptrParser) IsTerm() bool {
 	return self.Parser.IsTerm()
 }
-

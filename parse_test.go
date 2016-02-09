@@ -1,16 +1,16 @@
 package parse
 
 import (
-	"testing"
 	"fmt"
+	"testing"
 )
 
 type tmp struct {
-	A string `regexp:"[hH]ello"`
-	_ string `literal:","`
-	_ *string `set:"Set_w" parse:"?" regexp:"[wW]orld"`
-	Loc int   `parse:"#"`
-	w string
+	A   string  `regexp:"[hH]ello"`
+	_   string  `literal:","`
+	_   *string `set:"Set_w" parse:"?" regexp:"[wW]orld"`
+	Loc int     `parse:"#"`
+	w   string
 }
 
 func (self *tmp) Set_w(v *string) error {
@@ -28,15 +28,15 @@ NUMBER <- [1-9][0-9]*
 */
 
 type braced_expression struct {
-	_ string `regexp:"\\("`
+	_    string `regexp:"\\("`
 	Expr *expression
-	_ string `regexp:"\\)"`
+	_    string `regexp:"\\)"`
 }
 
 type atom struct {
 	FirstOf
 
-	Expr braced_expression
+	Expr   braced_expression
 	Number int64
 }
 
@@ -50,8 +50,8 @@ func (self atom) p() {
 
 type mexpression struct {
 	First atom
-	Rest []struct {
-		Op string `regexp:"[*%/]"`
+	Rest  []struct {
+		Op  string `regexp:"[*%/]"`
 		Arg atom
 	} `parse: "*"`
 }
@@ -69,8 +69,8 @@ func (self mexpression) p() {
 
 type expression struct {
 	First mexpression
-	Rest []struct {
-		Op string `regexp:"[-+]"`
+	Rest  []struct {
+		Op  string `regexp:"[-+]"`
 		Arg mexpression
 	} `parse: "*"`
 }
@@ -111,15 +111,15 @@ type abc_S struct {
 }
 
 type abc_A struct {
-	A string `regexp:"a"`
+	A  string `regexp:"a"`
 	A1 *abc_A `parse:"?"`
-	B string `regexp:"b"`
+	B  string `regexp:"b"`
 }
 
 type abc_B struct {
-	B string `regexp:"b"`
+	B  string `regexp:"b"`
 	B1 *abc_B `parse:"?"`
-	C string `regexp:"c"`
+	C  string `regexp:"c"`
 }
 
 func TestParse(t *testing.T) {
@@ -144,7 +144,7 @@ func TestParse(t *testing.T) {
 		println("")
 	}
 
-	for _, s := range([]string{"aabbcc", "", "abc", "aabbc", "aabcc"}) {
+	for _, s := range []string{"aabbcc", "", "abc", "aabbc", "aabcc"} {
 		var g abc_S
 		_, e = Parse(&g, []byte(s), &Options{PackratEnabled: true})
 		fmt.Printf("EXPR: %s\n", s)
@@ -153,4 +153,3 @@ func TestParse(t *testing.T) {
 		}
 	}
 }
-

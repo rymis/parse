@@ -1,13 +1,13 @@
 package parse
 
 import (
-	"reflect"
-	"io"
 	"errors"
 	"fmt"
+	"io"
+	"reflect"
+	"sync"
 	"unicode"
 	"unicode/utf8"
-	"sync"
 )
 
 // Object to hold parser. I need this one because recursive rules compilation.
@@ -112,7 +112,7 @@ func appendField(type_of reflect.Type, fields *[]field, idx int) error {
 		return nil
 	}
 
-	fld := field{ Name: f_type.Name, Type: f_type.Type }
+	fld := field{Name: f_type.Name, Type: f_type.Type}
 	if f_type.Name != "_" {
 		r, l := utf8.DecodeRuneInString(f_type.Name)
 		if l == 0 || !unicode.IsUpper(r) { // Private field: skipping
@@ -146,8 +146,8 @@ func appendField(type_of reflect.Type, fields *[]field, idx int) error {
 
 // Type and tag for parse keys
 type typeAndTag struct {
-	Type     reflect.Type
-	Tag      reflect.StructTag
+	Type reflect.Type
+	Tag  reflect.StructTag
 }
 
 // This map is not so big, because it will contain only type+tag keys.
@@ -176,7 +176,7 @@ func compileInternal(type_of reflect.Type, tag reflect.StructTag) (parser, error
 		return p, nil
 	}
 
-	proxy := &proxyParser{ nil }
+	proxy := &proxyParser{nil}
 	_compiledParsers[key] = proxy
 
 	p, err := compileType(type_of, tag)
@@ -200,7 +200,7 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 	switch type_of.Kind() {
 	case reflect.Struct:
 		if type_of.NumField() == 0 { // Empty
-			return &sequenceParser{ Fields : nil }, nil
+			return &sequenceParser{Fields: nil}, nil
 		}
 
 		fields := make([]field, 0)
@@ -212,7 +212,7 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 				}
 			}
 
-			return &firstOfParser{ Fields: fields }, nil
+			return &firstOfParser{Fields: fields}, nil
 		} else {
 			for i := 0; i < type_of.NumField(); i++ {
 				err = appendField(type_of, &fields, i)
@@ -222,7 +222,7 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 				}
 			}
 
-			return &sequenceParser{ Fields: fields }, nil
+			return &sequenceParser{Fields: fields}, nil
 		}
 
 		return nil, errors.New("XXX")
@@ -248,16 +248,16 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 			return &locationParser{}, nil
 		}
 
-		return &intParser{ }, nil
+		return &intParser{}, nil
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return &uintParser{ }, nil
+		return &uintParser{}, nil
 
 	case reflect.Bool:
 		return &boolParser{}, nil
 
 	case reflect.Float32, reflect.Float64:
-		return &floatParser{ }, nil
+		return &floatParser{}, nil
 
 	/* TODO: complex numbers */
 
@@ -278,7 +278,7 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 			return nil, err
 		}
 
-		return &sliceParser{ Min: min, Delimiter: delimiter, Parser: p }, nil
+		return &sliceParser{Min: min, Delimiter: delimiter, Parser: p}, nil
 
 	case reflect.Ptr:
 		p, err := compileInternal(type_of.Elem(), tag)
@@ -286,11 +286,10 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 			return nil, err
 		}
 
-		return &ptrParser{ Parser: p, Optional: (tag.Get("parse") == "?") }, nil
+		return &ptrParser{Parser: p, Optional: (tag.Get("parse") == "?")}, nil
 	default:
 		return nil, errors.New(fmt.Sprintf("Invalid argument for Compile: unsupported type '%v'", type_of))
 	}
 
 	return nil, errors.New(fmt.Sprintf("Invalid argument for Compile: unsupported type '%v'", type_of))
 }
-

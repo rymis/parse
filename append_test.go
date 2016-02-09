@@ -1,8 +1,8 @@
 package parse
 
 import (
-	"testing"
 	"fmt"
+	"testing"
 )
 
 type spaces struct {
@@ -15,44 +15,44 @@ type white struct {
 
 type config struct {
 	Sections []section `parse:"*"`
-	W          white
-//	Eof        string `parse:"!" regexp:".|\\n"`
+	W        white
+	//	Eof        string `parse:"!" regexp:".|\\n"`
 }
 
 type section struct {
-	White      white
-	Name       string `regexp:"[a-zA-Z][a-zA-Z0-9_]*"`
-	W1         white
-	_          string `literal:"{"`
-	Pairs    []pair
-	W2         spaces
-	_          string `literal:"}"`
+	White white
+	Name  string `regexp:"[a-zA-Z][a-zA-Z0-9_]*"`
+	W1    white
+	_     string `literal:"{"`
+	Pairs []pair
+	W2    spaces
+	_     string `literal:"}"`
 }
 
 type pair struct {
-	White      white
-	Name       string `regexp:"[a-zA-Z][a-zA-Z0-9_]*"`
-	W1         spaces
-	_          string `literal:"="`
-	W2         spaces
-	Value      value
-	W3         spaces
+	White white
+	Name  string `regexp:"[a-zA-Z][a-zA-Z0-9_]*"`
+	W1    spaces
+	_     string `literal:"="`
+	W2    spaces
+	Value value
+	W3    spaces
 }
 
 type value struct {
 	FirstOf
-	Int        int64
-	String     string
-	Bool       bool
-	Array      array
-	RawString  string `regexp:"[^\n]*\n"`
+	Int       int64
+	String    string
+	Bool      bool
+	Array     array
+	RawString string `regexp:"[^\n]*\n"`
 }
 
 type array struct {
-	_          string `literal:"["`
-	Values   []value  `delimiter:","`
-	W2         white
-	_          string `literal:"]"`
+	_      string  `literal:"["`
+	Values []value `delimiter:","`
+	W2     white
+	_      string `literal:"]"`
 }
 
 func skip(str []byte, loc int) int {
@@ -97,7 +97,7 @@ Section2 {
 
 func TestAppend(t *testing.T) {
 	var cfg config
-	nl, err := Parse(&cfg, []byte(test1), &Options{Debug:true})
+	nl, err := Parse(&cfg, []byte(test1), &Options{Debug: true})
 	if err != nil {
 		fmt.Printf("Error(%d): %v\n", nl, err)
 		return
@@ -112,4 +112,3 @@ func TestAppend(t *testing.T) {
 
 	fmt.Printf("CONFIG:\n%s\n", string(res))
 }
-

@@ -1,8 +1,8 @@
 package parse
 
 import (
-	"testing"
 	"fmt"
+	"testing"
 )
 
 /* Left recursion:
@@ -12,9 +12,9 @@ ATOM <- '(' EXPR ')' / Int64
 */
 
 type BEXPR struct {
-	_ string `regexp:"\\("`
+	_    string `regexp:"\\("`
 	Expr EXPR
-	_ string `regexp:"\\)"`
+	_    string `regexp:"\\)"`
 }
 
 type ATOM struct {
@@ -33,7 +33,7 @@ type MUL_1 struct {
 
 type MUL struct {
 	FirstOf
-	Mul *MUL_1
+	Mul  *MUL_1
 	Atom ATOM
 }
 
@@ -63,9 +63,9 @@ func print_mul(m *MUL) {
 
 type EXPR_1 struct {
 	Expr EXPR
-	Arg *struct {
-		Op   string `regexp:"[-+]"`
-		Mul  MUL
+	Arg  *struct {
+		Op  string `regexp:"[-+]"`
+		Mul MUL
 	} `parse:"?"`
 }
 
@@ -181,4 +181,3 @@ func TestPackrat(t *testing.T) {
 		fmt.Println("")
 	}
 }
-

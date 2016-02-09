@@ -1,8 +1,8 @@
 package parse
 
 import (
-	"reflect"
 	"io"
+	"reflect"
 )
 
 // Write encoded value into output stream.
@@ -38,5 +38,3 @@ func Append(array []byte, value interface{}) ([]byte, error) {
 
 	return x.buf, nil
 }
-
-

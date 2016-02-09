@@ -113,9 +113,9 @@ with
 package parse
 
 import (
-	"reflect"
-	"fmt"
 	"errors"
+	"fmt"
+	"reflect"
 )
 
 // Error is parse error representation.
@@ -143,7 +143,7 @@ func (self Error) Error() string {
 	lineno := 1
 	col := 1
 	i := 0
-	for i = 0; i < len(self.Str) - 1 && i < self.Location; i++ {
+	for i = 0; i < len(self.Str)-1 && i < self.Location; i++ {
 		if self.Str[i] == '\n' {
 			lineno++
 			start = i + 1
@@ -159,8 +159,8 @@ func (self Error) Error() string {
 	}
 
 	var s string
-	if len(self.Str) > start + col - 1 {
-		s = string(self.Str[start:start + col - 1]) + "<!--here--!>" + string(self.Str[start + col - 1:i])
+	if len(self.Str) > start+col-1 {
+		s = string(self.Str[start:start+col-1]) + "<!--here--!>" + string(self.Str[start+col-1:i])
 	} else {
 		s = string(self.Str[start:i])
 	}
@@ -169,24 +169,24 @@ func (self Error) Error() string {
 }
 
 type packratKey struct {
-	rule uint
+	rule     uint
 	location int
 }
 
 type packratValue struct {
 	// Set to true when result is actual in table
-	parsed    bool
+	parsed bool
 
 	// Recursion level
 	recursionLevel int
 
 	// New location
-	new_loc  int
+	new_loc int
 	// Value
-	value    reflect.Value
+	value reflect.Value
 	// Error
-	msg      string
-	err_loc  int
+	msg     string
+	err_loc int
 }
 
 // Parse context
@@ -197,7 +197,7 @@ type parseContext struct {
 	// Packrat table
 	packrat map[packratKey]*packratValue
 	// Locations with recursive rules:
-	recursiveLocations  map[int]bool
+	recursiveLocations map[int]bool
 }
 
 func (self packratValue) String() string {
@@ -205,7 +205,7 @@ func (self packratValue) String() string {
 }
 
 // Create new parse.Error:
-func (ctx *parseContext) NewError(location int, msg string, args... interface{}) error {
+func (ctx *parseContext) NewError(location int, msg string, args ...interface{}) error {
 	var s string
 
 	if len(args) == 0 {
@@ -218,9 +218,9 @@ func (ctx *parseContext) NewError(location int, msg string, args... interface{})
 }
 
 // Show debug message if need to
-func (ctx *parseContext) debug(msg string, args... interface{}) {
+func (ctx *parseContext) debug(msg string, args ...interface{}) {
 	if ctx.params != nil && ctx.params.Debug {
-		fmt.Printf("DEBUG: " + msg, args...)
+		fmt.Printf("DEBUG: "+msg, args...)
 	}
 }
 
@@ -248,7 +248,7 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 		return p.ParseValue(ctx, value_of, location, err)
 	}
 
-	key := packratKey{ p.Id(), location }
+	key := packratKey{p.Id(), location}
 	cache, ok := ctx.packrat[key]
 	if ok {
 		ctx.debug("[CACHE [%d] %v]\n", location, cache)
@@ -258,7 +258,7 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 				value_of.Set(cache.value.Elem())
 			} else {
 				err.Location = cache.err_loc
-				err.Message  = cache.msg
+				err.Message = cache.msg
 			}
 
 			ctx.debug("[RETURN %d %d %v]\n", cache.new_loc, cache.err_loc, cache.msg)
@@ -288,7 +288,7 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 		}
 	}
 
-	ctx.packrat[key] = &packratValue{ parsed: false, recursionLevel: 0, new_loc: location }
+	ctx.packrat[key] = &packratValue{parsed: false, recursionLevel: 0, new_loc: location}
 	l := p.ParseValue(ctx, value_of, location, err)
 	cache = ctx.packrat[key]
 
@@ -357,18 +357,18 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 		}
 	}
 
-//	ctx.debug("[RETURN %d %v]\n", l, err)
-//	return l, err
+	//	ctx.debug("[RETURN %d %v]\n", l, err)
+	//	return l, err
 }
 
 // Options is structure containing parameters of the parsing process.
 type Options struct {
 	// Function to skip whitespaces. If nil will not skip anything.
-	SkipWhite            func (str []byte, loc int) int
+	SkipWhite func(str []byte, loc int) int
 	// Flag to enable packrat parsing. If not set packrat table is used only for left recursion detection and processing.
-	PackratEnabled       bool
+	PackratEnabled bool
 	// Enable grammar debugging messages. It is useful if you have some problems with grammar but produces a lot of output.
-	Debug                bool
+	Debug bool
 }
 
 // Parse value from string and return position after parsing and error.
@@ -386,7 +386,7 @@ func Parse(result interface{}, str []byte, params *Options) (new_location int, e
 	}
 
 	if params == nil {
-		params = &Options{ SkipWhite: SkipSpaces }
+		params = &Options{SkipWhite: SkipSpaces}
 	}
 
 	p, err := compile(type_of.Elem(), reflect.StructTag(""))
@@ -400,8 +400,8 @@ func Parse(result interface{}, str []byte, params *Options) (new_location int, e
 	C.packrat = make(map[packratKey]*packratValue)
 	C.recursiveLocations = make(map[int]bool)
 
-	e := Error{ str, 0, "" }
-	new_location =  C.parse(value_of.Elem(), p, 0, &e)
+	e := Error{str, 0, ""}
+	new_location = C.parse(value_of.Elem(), p, 0, &e)
 	if new_location < 0 {
 		return new_location, e
 	}
@@ -411,7 +411,7 @@ func Parse(result interface{}, str []byte, params *Options) (new_location int, e
 
 // Create new default parameters object.
 func NewOptions() *Options {
-	return &Options{ SkipWhite: SkipSpaces }
+	return &Options{SkipWhite: SkipSpaces}
 }
 
 // Skip spaces, tabulations and newlines:
@@ -426,9 +426,9 @@ func SkipSpaces(str []byte, loc int) int {
 }
 
 func strAt(str []byte, loc int, s string) bool {
-	if loc + len(s) <= len(str) {
-		for i := range(s) {
-			if str[loc + i] != s[i] {
+	if loc+len(s) <= len(str) {
+		for i := range s {
+			if str[loc+i] != s[i] {
 				return false
 			}
 		}
@@ -457,7 +457,7 @@ func SkipOneLineComment(str []byte, loc int, begin string) int {
 // If you are allowing nested comments recursive must be set to true.
 func SkipMultilineComment(str []byte, loc int, begin, end string, recursive bool) int {
 	if strAt(str, loc, begin) {
-		for i := loc + len(begin); i < len(str) - len(end); i++ {
+		for i := loc + len(begin); i < len(str)-len(end); i++ {
 			if strAt(str, i, end) {
 				return i + len(end)
 			}
@@ -516,12 +516,12 @@ func SkipTeXComment(str []byte, loc int) int {
 }
 
 // Skip any count of any substrings defined by skip functions.
-func SkipAll(str []byte, loc int, funcs... func ([]byte, int) int) int {
+func SkipAll(str []byte, loc int, funcs ...func([]byte, int) int) int {
 	var l int
 	var skipped bool
 	for {
 		skipped = false
-		for _, f := range(funcs) {
+		for _, f := range funcs {
 			l = f(str, loc)
 			if l > loc {
 				loc = l
@@ -536,4 +536,3 @@ func SkipAll(str []byte, loc int, funcs... func ([]byte, int) int) int {
 
 	return loc
 }
-
