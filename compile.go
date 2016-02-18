@@ -166,6 +166,7 @@ func compile(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
 	}
 
 	isLRPossible(p, nil)
+
 	return p, nil
 }
 
