@@ -166,6 +166,12 @@ func compile(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
 	}
 
 	isLRPossible(p, nil)
+	// Try to find all parsers with LR is not set:
+	for _, par := range(_compiledParsers) {
+		if par.IsLR() == 0 {
+			isLRPossible(par, nil)
+		}
+	}
 
 	return p, nil
 }

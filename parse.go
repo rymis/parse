@@ -245,12 +245,7 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 	location = ctx.skipWS(location)
 
 	if !ctx.params.PackratEnabled {
-		lr := p.IsLR()
-		if lr == 0 {
-			isLRPossible(p, nil)
-			lr = p.IsLR()
-		}
-		if lr > 0 { // Left recursion is not possible
+		if p.IsLR() > 0 { // Left recursion is not possible
 			return p.ParseValue(ctx, value_of, location, err)
 		}
 	}
