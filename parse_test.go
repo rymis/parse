@@ -10,11 +10,12 @@ import (
 type myEOF struct {
 }
 
-func (self *myEOF) ParseValue(str []byte) (int, error) {
-	fmt.Printf("##### EOF checker!\n")
-	if len(str) > 0 {
+func (self *myEOF) ParseValue(str []byte, loc int) (int, error) {
+	if loc < len(str) {
+		fmt.Printf("[ERROR] ##### EOF checker!\n")
 		return -1, errors.New("Waiting for end of file")
 	}
+	fmt.Printf("[OK] ##### EOF checker!\n")
 
 	return 0, nil
 }

@@ -1128,7 +1128,7 @@ func (self *parserParser) ParseValue(ctx *parseContext, value_of reflect.Value, 
 		v = value_of.Interface().(Parser)
 	}
 
-	l, e := v.ParseValue(ctx.str[location:])
+	l, e := v.ParseValue(ctx.str, location)
 	if e != nil {
 		switch ev := e.(type) {
 		case Error:
@@ -1142,7 +1142,7 @@ func (self *parserParser) ParseValue(ctx *parseContext, value_of reflect.Value, 
 		return -1
 	}
 
-	location += l
+	location = l
 	if location > len(ctx.str) {
 		panic("Invalid parser")
 	}
