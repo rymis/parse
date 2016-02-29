@@ -116,6 +116,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"io"
 )
 
 // Error is parse error representation.
@@ -166,6 +167,14 @@ func (self Error) Error() string {
 	}
 
 	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.Message, s)
+}
+
+// Parse interface. Parser will call ParseValue method to parse values of this types.
+type Parser interface {
+	// This function must parse value from buffer and return length or error
+	ParseValue(buf []byte) (length int, err error)
+	// This function must write value into the output stream.
+	WriteValue(out io.Writer) error
 }
 
 type packratKey struct {

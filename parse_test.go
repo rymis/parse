@@ -3,7 +3,26 @@ package parse
 import (
 	"fmt"
 	"testing"
+	"errors"
+	"io"
 )
+
+type myEOF struct {
+}
+
+func (self *myEOF) ParseValue(str []byte) (int, error) {
+	fmt.Printf("##### EOF checker!\n")
+	if len(str) > 0 {
+		return -1, errors.New("Waiting for end of file")
+	}
+
+	return 0, nil
+}
+
+func (self *myEOF) WriteValue(out io.Writer) error {
+	fmt.Printf("##### EOF writer!\n")
+	return nil
+}
 
 type tmp struct {
 	A   string  `regexp:"[hH]ello"`
@@ -11,6 +30,7 @@ type tmp struct {
 	_   *string `set:"Set_w" parse:"?" regexp:"[wW]orld"`
 	Loc int     `parse:"#"`
 	w   string
+	EOF myEOF
 }
 
 func (self *tmp) Set_w(v *string) error {
@@ -153,3 +173,4 @@ func TestParse(t *testing.T) {
 		}
 	}
 }
+

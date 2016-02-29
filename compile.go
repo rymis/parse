@@ -203,7 +203,15 @@ func compileInternal(type_of reflect.Type, tag reflect.StructTag) (parser, error
 	return p, nil
 }
 
+var _parserType = reflect.TypeOf((*Parser)(nil)).Elem()
 func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err error) {
+	// Check if field has type that implements parser:
+	if type_of.Implements(_parserType) {
+		return &parserParser{ptr:false}, nil
+	} else if type_of.Kind() != reflect.Ptr && reflect.PtrTo(type_of).Implements(_parserType) {
+		return &parserParser{ptr:true}, nil
+	}
+
 	switch type_of.Kind() {
 	case reflect.Struct:
 		if type_of.NumField() == 0 { // Empty

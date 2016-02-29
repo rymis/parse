@@ -1110,3 +1110,67 @@ func (self *ptrParser) IsLRPossible(parsers []parser) (possible bool, can_parse_
 func (self *ptrParser) IsTerm() bool {
 	return self.Parser.IsTerm()
 }
+
+// Parser
+type parserParser struct {
+	idHolder
+	ptr bool
+}
+
+func (self *parserParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+	var v Parser
+	if self.ptr {
+		v = value_of.Addr().Interface().(Parser)
+	} else {
+		if value_of.Kind() == reflect.Ptr {
+			value_of = reflect.New(value_of.Type().Elem())
+		}
+		v = value_of.Interface().(Parser)
+	}
+
+	l, e := v.ParseValue(ctx.str[location:])
+	if e != nil {
+		switch ev := e.(type) {
+		case Error:
+			err.Location = ev.Location
+			err.Message = ev.Message
+			err.Str = ev.Str
+			return -1
+		}
+		err.Location = location
+		err.Message = e.Error()
+		return -1
+	}
+
+	location += l
+	if location > len(ctx.str) {
+		panic("Invalid parser")
+	}
+
+	return location
+}
+
+var emptyValueError = errors.New("Trying to out nil value")
+func (self *parserParser) WriteValue(out io.Writer, value_of reflect.Value) error {
+	var v Parser
+	if self.ptr {
+		v = value_of.Addr().Interface().(Parser)
+	} else {
+		v = value_of.Interface().(Parser)
+	}
+
+	if value_of.Kind() == reflect.Ptr && value_of.IsNil() {
+		return emptyValueError
+	}
+
+	return v.WriteValue(out)
+}
+
+func (self *parserParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+	return false, true // We will think bad way
+}
+
+func (self *parserParser) IsTerm() bool {
+	return false // Actually it is not applicable property
+}
+
