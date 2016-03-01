@@ -1,5 +1,5 @@
 /*
-Easy to use PEG implementation with Go.
+Package parse: easy to use PEG implementation with Go.
 
 This package contains PEG (Parsing Expressions Grammar) implementation that could be used with Go.
 This library is much different from other libraries because grammar mapped to Go types, so you don't need to use
@@ -169,10 +169,10 @@ func (self Error) Error() string {
 	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.Message, s)
 }
 
-// Parse interface. Parser will call ParseValue method to parse values of this types.
+// Parser interface. Parser will call ParseValue method to parse values of this types.
 type Parser interface {
 	// This function must parse value from buffer and return length or error
-	ParseValue(buf []byte, loc int) (new_location int, err error)
+	ParseValue(buf []byte, loc int) (newLocation int, err error)
 	// This function must write value into the output stream.
 	WriteValue(out io.Writer) error
 }
@@ -286,17 +286,17 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 			cache.err_loc = location
 			ctx.debug("[RETURN %d]\n", location)
 			return -1
-		} else { // Return previous recursion level result:
-			if cache.new_loc >= 0 {
-				value_of.Set(cache.value.Elem())
-			} else {
-				err.Message = cache.msg
-				err.Location = cache.err_loc
-			}
-
-			ctx.debug("[RETURN %d]\n", cache.new_loc)
-			return cache.new_loc
 		}
+		// Return previous recursion level result:
+		if cache.new_loc >= 0 {
+			value_of.Set(cache.value.Elem())
+		} else {
+			err.Message = cache.msg
+			err.Location = cache.err_loc
+		}
+
+		ctx.debug("[RETURN %d]\n", cache.new_loc)
+		return cache.new_loc
 	}
 
 	ctx.packrat[key] = &packratValue{parsed: false, recursionLevel: 0, new_loc: location}
@@ -323,49 +323,49 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 
 		ctx.debug("[RETURN %d]\n", l)
 		return l
-	} else {
-		ctx.recursiveLocations[location] = true
+	}
 
-		cache.new_loc = l
-		cache.msg = err.Message
-		cache.err_loc = err.Location
-		if l >= 0 {
-			cache.value = reflect.New(value_of.Type())
-			cache.value.Elem().Set(value_of)
-		}
+	ctx.recursiveLocations[location] = true
+
+	cache.new_loc = l
+	cache.msg = err.Message
+	cache.err_loc = err.Location
+	if l >= 0 {
+		cache.value = reflect.New(value_of.Type())
+		cache.value.Elem().Set(value_of)
+	}
+	cache.recursionLevel = 2
+
+	for {
+		// We will parse n times until the error or stop of position increasing:
 		cache.recursionLevel = 2
 
-		for {
-			// We will parse n times until the error or stop of position increasing:
-			cache.recursionLevel = 2
+		l := p.ParseValue(ctx, value_of, location, err)
 
-			l := p.ParseValue(ctx, value_of, location, err)
+		// cache = ctx.packrat[key] // TODO: ???
+		if l < 0 { // This step was not good so we must return previous value
+			cache.parsed = true
 
-			// cache = ctx.packrat[key] // TODO: ???
-			if l < 0 { // This step was not good so we must return previous value
-				cache.parsed = true
-
-				if cache.new_loc >= 0 {
-					value_of.Set(cache.value.Elem())
-				}
-
-				ctx.debug("[RETURN %d]\n", cache.new_loc)
-
-				return cache.new_loc
-			} else if cache.new_loc >= 0 && l <= cache.new_loc { // End of recursion: there was no increasing of position
+			if cache.new_loc >= 0 {
 				value_of.Set(cache.value.Elem())
-				cache.parsed = true
-				cache.recursionLevel = 0
-				ctx.debug("[RETURN %d]\n", cache.new_loc)
-				return cache.new_loc
 			}
 
-			cache.new_loc = l
-			if !cache.value.IsValid() {
-				cache.value = reflect.New(value_of.Type())
-			}
-			cache.value.Elem().Set(value_of)
+			ctx.debug("[RETURN %d]\n", cache.new_loc)
+
+			return cache.new_loc
+		} else if cache.new_loc >= 0 && l <= cache.new_loc { // End of recursion: there was no increasing of position
+			value_of.Set(cache.value.Elem())
+			cache.parsed = true
+			cache.recursionLevel = 0
+			ctx.debug("[RETURN %d]\n", cache.new_loc)
+			return cache.new_loc
 		}
+
+		cache.new_loc = l
+		if !cache.value.IsValid() {
+			cache.value = reflect.New(value_of.Type())
+		}
+		cache.value.Elem().Set(value_of)
 	}
 
 	//	ctx.debug("[RETURN %d %v]\n", l, err)
@@ -420,12 +420,12 @@ func Parse(result interface{}, str []byte, params *Options) (new_location int, e
 	return new_location, nil
 }
 
-// Create new default parameters object.
+// NewOptions creates new default parameters object.
 func NewOptions() *Options {
 	return &Options{SkipWhite: SkipSpaces}
 }
 
-// Skip spaces, tabulations and newlines:
+// SkipSpaces skips spaces, tabulations and newlines:
 func SkipSpaces(str []byte, loc int) int {
 	for i := loc; i < len(str); i++ {
 		if str[i] != ' ' && str[i] != '\t' && str[i] != '\n' && str[i] != '\r' {
@@ -448,7 +448,7 @@ func strAt(str []byte, loc int, s string) bool {
 	return false
 }
 
-// Skip one-line comment that starts from begin and ends with newline or end of string
+// SkipOneLineComment skips one-line comment that starts from begin and ends with newline or end of string
 func SkipOneLineComment(str []byte, loc int, begin string) int {
 	if strAt(str, loc, begin) {
 		loc += len(begin)
@@ -464,7 +464,7 @@ func SkipOneLineComment(str []byte, loc int, begin string) int {
 	return loc
 }
 
-// Skip multiline comment that starts from begin and ends with end.
+// SkipMultilineComment skips multiline comment that starts from begin and ends with end.
 // If you are allowing nested comments recursive must be set to true.
 func SkipMultilineComment(str []byte, loc int, begin, end string, recursive bool) int {
 	if strAt(str, loc, begin) {
@@ -486,47 +486,47 @@ func SkipMultilineComment(str []byte, loc int, begin, end string, recursive bool
 	return loc
 }
 
-// Skip shell style comment: "# .... \n"
+// SkipShellComment skips shell style comment: "# .... \n"
 func SkipShellComment(str []byte, loc int) int {
 	return SkipOneLineComment(str, loc, "#")
 }
 
-// Skip C++ style comment: "// ..... \n"
+// SkipCPPComment skips C++ style comment: "// ..... \n"
 func SkipCPPComment(str []byte, loc int) int {
 	return SkipOneLineComment(str, loc, "//")
 }
 
-// Skip C style comment: "/* ..... */"
+// SkipCComent skips C style comment: "/* ..... */"
 func SkipCComment(str []byte, loc int) int {
 	return SkipMultilineComment(str, loc, "/*", "*/", false)
 }
 
-// Skip Pascal style comment: "(* ... *)"
+// SkipPascalComment skips Pascal style comment: "(* ... *)"
 func SkipPascalComment(str []byte, loc int) int {
 	return SkipMultilineComment(str, loc, "(*", "*)", true)
 }
 
-// Skip HTML style comment: "<!-- ... -->"
+// SkipHTMLComment skips HTML style comment: "<!-- ... -->"
 func SkipHTMLComment(str []byte, loc int) int {
 	return SkipMultilineComment(str, loc, "<!--", "-->", false)
 }
 
-// Skip Ada style comment: "-- .... \n"
+// SkipAdaComment skips Ada style comment: "-- .... \n"
 func SkipAdaComment(str []byte, loc int) int {
 	return SkipOneLineComment(str, loc, "--")
 }
 
-// Skip Lisp style comment: "; .... \n"
+// SkipLispComment skips Lisp style comment: "; .... \n"
 func SkipLispComment(str []byte, loc int) int {
 	return SkipOneLineComment(str, loc, ";")
 }
 
-// Skip TeX style comment: "% .... \n"
+// SkipTeXComment skips TeX style comment: "% .... \n"
 func SkipTeXComment(str []byte, loc int) int {
 	return SkipOneLineComment(str, loc, ";")
 }
 
-// Skip any count of any substrings defined by skip functions.
+// SkipAll skips any count of any substrings defined by skip functions.
 func SkipAll(str []byte, loc int, funcs ...func([]byte, int) int) int {
 	var l int
 	var skipped bool
@@ -545,3 +545,5 @@ func SkipAll(str []byte, loc int, funcs ...func([]byte, int) int) int {
 		}
 	}
 }
+
+
