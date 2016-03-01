@@ -18,3 +18,5 @@ new_location, err := parse.Parse(&hello, []byte("Hello, user"), nil)
 Documentation is here: https://godoc.org/github.com/rymis/parse
 And user-friendly examples and book are placed [here](https://github.com/rymis/parse_examples/blob/master/book.md).
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/rymis/parse)](https://goreportcard.com/report/github.com/rymis/parse)
+
