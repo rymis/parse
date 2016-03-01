@@ -545,5 +545,3 @@ func SkipAll(str []byte, loc int, funcs ...func([]byte, int) int) int {
 		}
 	}
 }
-
-
