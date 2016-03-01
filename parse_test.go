@@ -1,10 +1,10 @@
 package parse
 
 import (
-	"fmt"
-	"testing"
 	"errors"
+	"fmt"
 	"io"
+	"testing"
 )
 
 type myEOF struct {
@@ -174,4 +174,3 @@ func TestParse(t *testing.T) {
 		}
 	}
 }
-

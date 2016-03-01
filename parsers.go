@@ -1151,6 +1151,7 @@ func (self *parserParser) ParseValue(ctx *parseContext, value_of reflect.Value, 
 }
 
 var emptyValueError = errors.New("Trying to out nil value")
+
 func (self *parserParser) WriteValue(out io.Writer, value_of reflect.Value) error {
 	var v Parser
 	if self.ptr {
@@ -1173,4 +1174,3 @@ func (self *parserParser) IsLRPossible(parsers []parser) (possible bool, can_par
 func (self *parserParser) IsTerm() bool {
 	return false // Actually it is not applicable property
 }
-

@@ -115,8 +115,8 @@ package parse
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"io"
+	"reflect"
 )
 
 // Error is parse error representation.

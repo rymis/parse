@@ -167,7 +167,7 @@ func compile(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
 
 	isLRPossible(p, nil)
 	// Try to find all parsers with LR is not set:
-	for _, par := range(_compiledParsers) {
+	for _, par := range _compiledParsers {
 		if par.IsLR() == 0 {
 			isLRPossible(par, nil)
 		}
@@ -204,12 +204,13 @@ func compileInternal(type_of reflect.Type, tag reflect.StructTag) (parser, error
 }
 
 var _parserType = reflect.TypeOf((*Parser)(nil)).Elem()
+
 func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err error) {
 	// Check if field has type that implements parser:
 	if type_of.Implements(_parserType) {
-		return &parserParser{ptr:false}, nil
+		return &parserParser{ptr: false}, nil
 	} else if type_of.Kind() != reflect.Ptr && reflect.PtrTo(type_of).Implements(_parserType) {
-		return &parserParser{ptr:true}, nil
+		return &parserParser{ptr: true}, nil
 	}
 
 	switch type_of.Kind() {
