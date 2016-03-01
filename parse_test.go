@@ -74,7 +74,7 @@ type mexpression struct {
 	Rest  []struct {
 		Op  string `regexp:"[*%/]"`
 		Arg atom
-	} `parse: "*"`
+	} `parse:"*"`
 }
 
 func (self mexpression) p() {
@@ -93,7 +93,7 @@ type expression struct {
 	Rest  []struct {
 		Op  string `regexp:"[-+]"`
 		Arg mexpression
-	} `parse: "*"`
+	} `parse:"*"`
 }
 
 func (self expression) p() {

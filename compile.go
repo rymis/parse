@@ -241,8 +241,6 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 			return &sequenceParser{Fields: fields}, nil
 		}
 
-		return nil, errors.New("XXX")
-
 	case reflect.String:
 		rx := tag.Get("regexp")
 		if rx == "" {
@@ -255,8 +253,6 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 		} else {
 			return newRegexpParser(rx)
 		}
-
-		return nil, errors.New("XXX")
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		opt := tag.Get("parse")
@@ -306,6 +302,4 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 	default:
 		return nil, errors.New(fmt.Sprintf("Invalid argument for Compile: unsupported type '%v'", type_of))
 	}
-
-	return nil, errors.New(fmt.Sprintf("Invalid argument for Compile: unsupported type '%v'", type_of))
 }

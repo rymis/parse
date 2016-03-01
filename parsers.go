@@ -854,7 +854,6 @@ func (self field) WriteValue(out io.Writer, value_of reflect.Value) error {
 				return errors.New("Could not out anonymous field if it is not literal")
 			}
 		}
-		return errors.New("Could not out anonymous field if it is not literal")
 	} else {
 		f := value_of.Field(self.Index)
 		return self.Parse.WriteValue(out, f)
