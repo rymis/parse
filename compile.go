@@ -15,106 +15,106 @@ type proxyParser struct {
 	p parser
 }
 
-func (self *proxyParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	if self.p == nil {
+func (par *proxyParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	return self.p.ParseValue(ctx, value_of, location, err)
+	return par.p.ParseValue(ctx, valueOf, location, err)
 }
 
-func (self *proxyParser) WriteValue(out io.Writer, value_of reflect.Value) error {
-	if self.p == nil {
+func (par *proxyParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	return self.p.WriteValue(out, value_of)
+	return par.p.WriteValue(out, valueOf)
 }
 
-func (self *proxyParser) SetId(id uint) {
-	if self.p == nil {
+func (par *proxyParser) SetID(id uint) {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	self.p.SetId(id)
+	par.p.SetID(id)
 }
 
-func (self *proxyParser) Id() uint {
-	if self.p == nil {
+func (par *proxyParser) ID() uint {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	return self.p.Id()
+	return par.p.ID()
 }
 
-func (self *proxyParser) String() string {
-	if self.p == nil {
+func (par *proxyParser) String() string {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	return self.p.String()
+	return par.p.String()
 }
 
-func (self *proxyParser) SetString(nm string) {
-	if self.p == nil {
+func (par *proxyParser) SetString(nm string) {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	self.p.SetString(nm)
+	par.p.SetString(nm)
 }
 
-func (self *proxyParser) SetParser(p parser) {
-	if self.p != nil {
+func (par *proxyParser) SetParser(p parser) {
+	if par.p != nil {
 		panic("Trying to change parser in proxy object")
 	}
 
-	self.p = p
+	par.p = p
 }
 
-func (self *proxyParser) IsTerm() bool {
-	if self.p == nil {
+func (par *proxyParser) IsTerm() bool {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	return self.p.IsTerm()
+	return par.p.IsTerm()
 }
 
-func (self *proxyParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
-	if self.p == nil {
+func (par *proxyParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	return self.p.IsLRPossible(parsers)
+	return par.p.IsLRPossible(parsers)
 }
 
-func (self *proxyParser) IsLR() int {
-	if self.p == nil {
+func (par *proxyParser) IsLR() int {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	return self.p.IsLR()
+	return par.p.IsLR()
 }
 
-func (self *proxyParser) SetLR(v int) {
-	if self.p == nil {
+func (par *proxyParser) SetLR(v int) {
+	if par.p == nil {
 		panic("nil parser")
 	}
 
-	self.p.SetLR(v)
+	par.p.SetLR(v)
 }
 
-func appendField(type_of reflect.Type, fields *[]field, idx int) error {
-	f_type := type_of.Field(idx)
+func appendField(typeOf reflect.Type, fields *[]field, idx int) error {
+	fType := typeOf.Field(idx)
 
-	ptag := f_type.Tag.Get("parse")
+	ptag := fType.Tag.Get("parse")
 	if ptag == "skip" {
 		// Skipping
 		return nil
 	}
 
-	fld := field{Name: f_type.Name, Type: f_type.Type}
-	if f_type.Name != "_" {
-		r, l := utf8.DecodeRuneInString(f_type.Name)
+	fld := field{Name: fType.Name, Type: fType.Type}
+	if fType.Name != "_" {
+		r, l := utf8.DecodeRuneInString(fType.Name)
 		if l == 0 || !unicode.IsUpper(r) { // Private field: skipping
 			return nil
 		}
@@ -130,9 +130,9 @@ func appendField(type_of reflect.Type, fields *[]field, idx int) error {
 		fld.Flags |= fieldFollowedBy
 	}
 
-	fld.Set = f_type.Tag.Get("set")
+	fld.Set = fType.Tag.Get("set")
 
-	p, err := compileInternal(f_type.Type, f_type.Tag)
+	p, err := compileInternal(fType.Type, fType.Tag)
 	if err != nil {
 		return nil
 	}
@@ -152,15 +152,15 @@ type typeAndTag struct {
 
 // This map is not so big, because it will contain only type+tag keys.
 var _compiledParsers = make(map[typeAndTag]parser)
-var _lastId uint = 1
+var _lastID uint = 1
 var _compileMutex sync.Mutex
 
 // Compile parser for type. Only one compilation process is possible in the same time.
-func compile(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
+func compile(typeOf reflect.Type, tag reflect.StructTag) (parser, error) {
 	_compileMutex.Lock()
 	defer _compileMutex.Unlock()
 
-	p, err := compileInternal(type_of, tag)
+	p, err := compileInternal(typeOf, tag)
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +176,8 @@ func compile(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
 	return p, nil
 }
 
-func compileInternal(type_of reflect.Type, tag reflect.StructTag) (parser, error) {
-	key := typeAndTag{type_of, tag}
+func compileInternal(typeOf reflect.Type, tag reflect.StructTag) (parser, error) {
+	key := typeAndTag{typeOf, tag}
 	p, ok := _compiledParsers[key]
 	if ok {
 		return p, nil
@@ -186,15 +186,15 @@ func compileInternal(type_of reflect.Type, tag reflect.StructTag) (parser, error
 	proxy := &proxyParser{nil}
 	_compiledParsers[key] = proxy
 
-	p, err := compileType(type_of, tag)
+	p, err := compileType(typeOf, tag)
 	if err != nil {
 		delete(_compiledParsers, key)
 		return nil, err
 	}
 
-	p.SetString(fmt.Sprintf("%v `%v`", type_of, tag))
-	p.SetId(_lastId)
-	_lastId++
+	p.SetString(fmt.Sprintf("%v `%v`", typeOf, tag))
+	p.SetID(_lastID)
+	_lastID++
 	proxy.SetParser(p)
 
 	// It is Ok even if we used p while compiling:
@@ -205,24 +205,24 @@ func compileInternal(type_of reflect.Type, tag reflect.StructTag) (parser, error
 
 var _parserType = reflect.TypeOf((*Parser)(nil)).Elem()
 
-func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err error) {
+func compileType(typeOf reflect.Type, tag reflect.StructTag) (p parser, err error) {
 	// Check if field has type that implements parser:
-	if type_of.Implements(_parserType) {
+	if typeOf.Implements(_parserType) {
 		return &parserParser{ptr: false}, nil
-	} else if type_of.Kind() != reflect.Ptr && reflect.PtrTo(type_of).Implements(_parserType) {
+	} else if typeOf.Kind() != reflect.Ptr && reflect.PtrTo(typeOf).Implements(_parserType) {
 		return &parserParser{ptr: true}, nil
 	}
 
-	switch type_of.Kind() {
+	switch typeOf.Kind() {
 	case reflect.Struct:
-		if type_of.NumField() == 0 { // Empty
+		if typeOf.NumField() == 0 { // Empty
 			return &sequenceParser{Fields: nil}, nil
 		}
 
 		fields := make([]field, 0)
-		if type_of.Field(0).Type == reflect.TypeOf(FirstOf{}) { // FirstOf
-			for i := 1; i < type_of.NumField(); i++ {
-				err = appendField(type_of, &fields, i)
+		if typeOf.Field(0).Type == reflect.TypeOf(FirstOf{}) { // FirstOf
+			for i := 1; i < typeOf.NumField(); i++ {
+				err = appendField(typeOf, &fields, i)
 				if err != nil {
 					return nil, err
 				}
@@ -230,8 +230,8 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 
 			return &firstOfParser{Fields: fields}, nil
 		} else {
-			for i := 0; i < type_of.NumField(); i++ {
-				err = appendField(type_of, &fields, i)
+			for i := 0; i < typeOf.NumField(); i++ {
+				err = appendField(typeOf, &fields, i)
 
 				if err != nil {
 					return nil, err
@@ -285,7 +285,7 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 
 		delimiter := tag.Get("delimiter")
 
-		p, err := compileInternal(type_of.Elem(), "")
+		p, err := compileInternal(typeOf.Elem(), "")
 		if err != nil {
 			return nil, err
 		}
@@ -293,13 +293,13 @@ func compileType(type_of reflect.Type, tag reflect.StructTag) (p parser, err err
 		return &sliceParser{Min: min, Delimiter: delimiter, Parser: p}, nil
 
 	case reflect.Ptr:
-		p, err := compileInternal(type_of.Elem(), tag)
+		p, err := compileInternal(typeOf.Elem(), tag)
 		if err != nil {
 			return nil, err
 		}
 
 		return &ptrParser{Parser: p, Optional: (tag.Get("parse") == "?")}, nil
 	default:
-		return nil, errors.New(fmt.Sprintf("Invalid argument for Compile: unsupported type '%v'", type_of))
+		return nil, errors.New(fmt.Sprintf("Invalid argument for Compile: unsupported type '%v'", typeOf))
 	}
 }

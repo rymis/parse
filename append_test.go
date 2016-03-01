@@ -65,7 +65,7 @@ func skip(str []byte, loc int) int {
 	return len(str)
 }
 
-var test1 string = `
+var test1 = `
 Section {
 	name = 1
 	name = "String"

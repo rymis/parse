@@ -16,9 +16,9 @@ import (
 // Parser representation.
 type parser interface {
 	// Set identifier (for fast packrat getting/setting)
-	SetId(id uint)
+	SetID(id uint)
 	// Get identifier that has set before
-	Id() uint
+	ID() uint
 	// Get string representation of the parser
 	String() string
 	// Set string representation of the parser
@@ -57,7 +57,7 @@ func isLRPossible(p parser, parsers []parser) (possible bool, can_parse_empty bo
 	}
 
 	for _, t := range parsers {
-		if t.Id() == p.Id() {
+		if t.ID() == p.ID() {
 			p.SetLR(-1)
 			possible = true
 			return
@@ -81,11 +81,11 @@ type idHolder struct {
 	lr   int
 }
 
-func (self *idHolder) SetId(id uint) {
+func (self *idHolder) SetID(id uint) {
 	self.id = id
 }
 
-func (self *idHolder) Id() uint {
+func (self *idHolder) ID() uint {
 	return self.id
 }
 

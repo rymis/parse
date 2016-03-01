@@ -7,23 +7,23 @@ import (
 
 // Write encoded value into output stream.
 func Write(out io.Writer, value interface{}) error {
-	value_of := reflect.ValueOf(value)
-	type_of := value_of.Type()
+	valueOf := reflect.ValueOf(value)
+	typeOf := valueOf.Type()
 
-	p, err := compile(type_of, reflect.StructTag(""))
+	p, err := compile(typeOf, reflect.StructTag(""))
 	if err != nil {
 		return err
 	}
 
-	return p.WriteValue(out, value_of)
+	return p.WriteValue(out, valueOf)
 }
 
 type appender struct {
 	buf []byte
 }
 
-func (self *appender) Write(data []byte) (int, error) {
-	self.buf = append(self.buf, data...)
+func (a *appender) Write(data []byte) (int, error) {
+	a.buf = append(a.buf, data...)
 	return len(data), nil
 }
 

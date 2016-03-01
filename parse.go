@@ -259,7 +259,7 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 		}
 	}
 
-	key := packratKey{p.Id(), location}
+	key := packratKey{p.ID(), location}
 	cache, ok := ctx.packrat[key]
 	if ok {
 		ctx.debug("[CACHE [%d] %v]\n", location, cache)
