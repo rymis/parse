@@ -194,7 +194,7 @@ type packratValue struct {
 	// Value
 	value reflect.Value
 	// Error
-	msg     string
+	msg         string
 	errLocation int
 }
 

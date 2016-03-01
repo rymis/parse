@@ -133,13 +133,13 @@ type abcS struct {
 
 type abcA struct {
 	A  string `regexp:"a"`
-	A1 *abcA `parse:"?"`
+	A1 *abcA  `parse:"?"`
 	B  string `regexp:"b"`
 }
 
 type abcB struct {
 	B  string `regexp:"b"`
-	B1 *abcB `parse:"?"`
+	B1 *abcB  `parse:"?"`
 	C  string `regexp:"c"`
 }
 
