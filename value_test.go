@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-type s_tst struct {
+type sTst struct {
 	input, result string
 	ok            bool
 }
 
-var s_tests []s_tst = []s_tst{
+var sTests = []sTst{
 	{"`abc`", "abc", true},
 	{"`\\n\n\\n`", "\\n\n\\n", true},
 	{"\"\\\"\"", "\"", true},
@@ -33,7 +33,7 @@ var s_tests []s_tst = []s_tst{
 func TestString(t *testing.T) {
 	fmt.Println("Test string parsers")
 
-	for i, t := range s_tests {
+	for i, t := range sTests {
 		var s string
 
 		fmt.Printf("TEST [%d] ", i)
@@ -58,14 +58,14 @@ func TestString(t *testing.T) {
 	}
 }
 
-type i_tst struct {
+type iTst struct {
 	input   string
 	sresult int64
 	uresult uint64
 	ok      bool
 }
 
-var i_tests []i_tst = []i_tst{
+var iTests = []iTst{
 	{"0", 0, 0, true},
 	{"1233", 1233, 0, true},
 	{"-5", -5, 0, true},
@@ -77,7 +77,7 @@ var i_tests []i_tst = []i_tst{
 func TestInt(t *testing.T) {
 	fmt.Println("Test int parsers")
 
-	for i, t := range i_tests {
+	for i, t := range iTests {
 		var iv int64
 		var uv uint64
 		var ok bool
@@ -138,13 +138,13 @@ func TestBool(t *testing.T) {
 
 }
 
-type f_tst struct {
+type fTst struct {
 	input  string
 	result float64
 	ok     bool
 }
 
-var f_tests []f_tst = []f_tst{
+var fTests = []fTst{
 	{"0.1", 0.1, true},
 	{"-0.1", -0.1, true},
 	{"0.1e2", 0.1e2, true},
@@ -158,7 +158,7 @@ var f_tests []f_tst = []f_tst{
 func TestFloat(t *testing.T) {
 	fmt.Println("Test float parsers")
 
-	for i, t := range f_tests {
+	for i, t := range fTests {
 		var f float64
 
 		fmt.Printf("TEST [%d] ", i)
