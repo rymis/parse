@@ -1,5 +1,5 @@
 /*
-Package parse: easy to use PEG implementation with Go.
+Package parse - easy to use PEG implementation with Go.
 
 This package contains PEG (Parsing Expressions Grammar) implementation that could be used with Go.
 This library is much different from other libraries because grammar mapped to Go types, so you don't need to use
@@ -17,7 +17,7 @@ For example you can parse hello world using this structure:
 And the only thing you need to do is call Parse function:
 
 	var hello HelloWorld
-	new_location, err := parse.Parse(&hello, []byte("Hello, World!"), nil)
+	newLocation, err := parse.Parse(&hello, []byte("Hello, World!"), nil)
 
 You can also specify whitespace skipping function (default is to skip all spaces, tabulations, new-lines and carier returns)
 packrat using, grammar debugging options et. cetera.
@@ -26,7 +26,7 @@ One of the interesting features of this library is ability to parse Go base data
 simply parse int64 with Parse:
 
 	var i int64
-	new_location, err := parse.Parse(&i, []byte("123"), nil)
+	newLocation, err := parse.Parse(&i, []byte("123"), nil)
 
 If you need to parse variant types you need to insert FirstOf as first field in your structure:
 
@@ -35,7 +35,7 @@ If you need to parse variant types you need to insert FirstOf as first field in 
 		Str     string
 		Int     int
 	}
-	new_location, err := parse.Parse(new(StringOrInt), `"I can parse Go string!"`, nil)
+	newLocation, err := parse.Parse(new(StringOrInt), `"I can parse Go string!"`, nil)
 
 Optional fields must be of pointer type and contain `optional:"true"` tag. You can use slices that
 will be parsed as ELEMENT* or ELEMENT+ (if `repeat:"+"` was set in tag). You can specify another tags and types listed bellow.
@@ -139,13 +139,13 @@ type FirstOf struct {
 
 // Returns error string of parse error.
 // It is well-formed version of error so you can simply write it to user.
-func (self Error) Error() string {
+func (e Error) Error() string {
 	start := 0
 	lineno := 1
 	col := 1
 	i := 0
-	for i = 0; i < len(self.Str)-1 && i < self.Location; i++ {
-		if self.Str[i] == '\n' {
+	for i = 0; i < len(e.Str)-1 && i < e.Location; i++ {
+		if e.Str[i] == '\n' {
 			lineno++
 			start = i + 1
 			col = 1
@@ -153,20 +153,20 @@ func (self Error) Error() string {
 		col++
 	}
 
-	for ; i < len(self.Str); i++ {
-		if self.Str[i] == '\n' {
+	for ; i < len(e.Str); i++ {
+		if e.Str[i] == '\n' {
 			break
 		}
 	}
 
 	var s string
-	if len(self.Str) > start+col-1 {
-		s = string(self.Str[start:start+col-1]) + "<!--here--!>" + string(self.Str[start+col-1:i])
+	if len(e.Str) > start+col-1 {
+		s = string(e.Str[start:start+col-1]) + "<!--here--!>" + string(e.Str[start+col-1:i])
 	} else {
-		s = string(self.Str[start:i])
+		s = string(e.Str[start:i])
 	}
 
-	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, self.Message, s)
+	return fmt.Sprintf("Syntax error at line %d:%d: %s\n%s", lineno, col, e.Message, s)
 }
 
 // Parser interface. Parser will call ParseValue method to parse values of this types.
@@ -190,12 +190,12 @@ type packratValue struct {
 	recursionLevel int
 
 	// New location
-	new_loc int
+	newLocation int
 	// Value
 	value reflect.Value
 	// Error
 	msg     string
-	err_loc int
+	errLocation int
 }
 
 // Parse context
@@ -209,8 +209,8 @@ type parseContext struct {
 	recursiveLocations map[int]bool
 }
 
-func (self packratValue) String() string {
-	return fmt.Sprintf("{ parsed = %v, recursion = %d, new_loc = %d, err_loc = %d, msg = %s }", self.parsed, self.recursionLevel, self.new_loc, self.err_loc, self.msg)
+func (pv packratValue) String() string {
+	return fmt.Sprintf("{ parsed = %v, recursion = %d, newLocation = %d, errLocation = %d, msg = %s }", pv.parsed, pv.recursionLevel, pv.newLocation, pv.errLocation, pv.msg)
 }
 
 // Create new parse.Error:
@@ -248,14 +248,14 @@ func (ctx *parseContext) skipWS(loc int) int {
 }
 
 // Internal parse function
-func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, err *Error) int {
+func (ctx *parseContext) parse(valueOf reflect.Value, p parser, location int, err *Error) int {
 	ctx.debug("[PARSE {%v} %d %v]\n", p, location, ctx.params)
 
 	location = ctx.skipWS(location)
 
 	if !ctx.params.PackratEnabled {
 		if p.IsLR() > 0 { // Left recursion is not possible
-			return p.ParseValue(ctx, value_of, location, err)
+			return p.ParseValue(ctx, valueOf, location, err)
 		}
 	}
 
@@ -265,15 +265,15 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 		ctx.debug("[CACHE [%d] %v]\n", location, cache)
 
 		if cache.parsed { // Cached value
-			if cache.new_loc >= 0 {
-				value_of.Set(cache.value.Elem())
+			if cache.newLocation >= 0 {
+				valueOf.Set(cache.value.Elem())
 			} else {
-				err.Location = cache.err_loc
+				err.Location = cache.errLocation
 				err.Message = cache.msg
 			}
 
-			ctx.debug("[RETURN %d %d %v]\n", cache.new_loc, cache.err_loc, cache.msg)
-			return cache.new_loc
+			ctx.debug("[RETURN %d %d %v]\n", cache.newLocation, cache.errLocation, cache.msg)
+			return cache.newLocation
 		}
 
 		if cache.recursionLevel == 0 { // Recursion detected:
@@ -282,25 +282,25 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 
 			cache.recursionLevel = 1
 			cache.msg = fmt.Sprintf("Waiting for %v", p) // TODO: generate once
-			cache.new_loc = -1
-			cache.err_loc = location
+			cache.newLocation = -1
+			cache.errLocation = location
 			ctx.debug("[RETURN %d]\n", location)
 			return -1
 		}
 		// Return previous recursion level result:
-		if cache.new_loc >= 0 {
-			value_of.Set(cache.value.Elem())
+		if cache.newLocation >= 0 {
+			valueOf.Set(cache.value.Elem())
 		} else {
 			err.Message = cache.msg
-			err.Location = cache.err_loc
+			err.Location = cache.errLocation
 		}
 
-		ctx.debug("[RETURN %d]\n", cache.new_loc)
-		return cache.new_loc
+		ctx.debug("[RETURN %d]\n", cache.newLocation)
+		return cache.newLocation
 	}
 
-	ctx.packrat[key] = &packratValue{parsed: false, recursionLevel: 0, new_loc: location}
-	l := p.ParseValue(ctx, value_of, location, err)
+	ctx.packrat[key] = &packratValue{parsed: false, recursionLevel: 0, newLocation: location}
+	l := p.ParseValue(ctx, valueOf, location, err)
 	cache = ctx.packrat[key]
 
 	if cache.recursionLevel == 0 { // Not recursive
@@ -310,12 +310,12 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 			} else {
 				cache.parsed = true
 				cache.msg = err.Message
-				cache.err_loc = err.Location
+				cache.errLocation = err.Location
 				if l >= 0 {
-					cache.value = reflect.New(value_of.Type())
-					cache.value.Elem().Set(value_of)
+					cache.value = reflect.New(valueOf.Type())
+					cache.value.Elem().Set(valueOf)
 				}
-				cache.new_loc = l
+				cache.newLocation = l
 			}
 		} else {
 			delete(ctx.packrat, key)
@@ -327,12 +327,12 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 
 	ctx.recursiveLocations[location] = true
 
-	cache.new_loc = l
+	cache.newLocation = l
 	cache.msg = err.Message
-	cache.err_loc = err.Location
+	cache.errLocation = err.Location
 	if l >= 0 {
-		cache.value = reflect.New(value_of.Type())
-		cache.value.Elem().Set(value_of)
+		cache.value = reflect.New(valueOf.Type())
+		cache.value.Elem().Set(valueOf)
 	}
 	cache.recursionLevel = 2
 
@@ -340,32 +340,32 @@ func (ctx *parseContext) parse(value_of reflect.Value, p parser, location int, e
 		// We will parse n times until the error or stop of position increasing:
 		cache.recursionLevel = 2
 
-		l := p.ParseValue(ctx, value_of, location, err)
+		l := p.ParseValue(ctx, valueOf, location, err)
 
 		// cache = ctx.packrat[key] // TODO: ???
 		if l < 0 { // This step was not good so we must return previous value
 			cache.parsed = true
 
-			if cache.new_loc >= 0 {
-				value_of.Set(cache.value.Elem())
+			if cache.newLocation >= 0 {
+				valueOf.Set(cache.value.Elem())
 			}
 
-			ctx.debug("[RETURN %d]\n", cache.new_loc)
+			ctx.debug("[RETURN %d]\n", cache.newLocation)
 
-			return cache.new_loc
-		} else if cache.new_loc >= 0 && l <= cache.new_loc { // End of recursion: there was no increasing of position
-			value_of.Set(cache.value.Elem())
+			return cache.newLocation
+		} else if cache.newLocation >= 0 && l <= cache.newLocation { // End of recursion: there was no increasing of position
+			valueOf.Set(cache.value.Elem())
 			cache.parsed = true
 			cache.recursionLevel = 0
-			ctx.debug("[RETURN %d]\n", cache.new_loc)
-			return cache.new_loc
+			ctx.debug("[RETURN %d]\n", cache.newLocation)
+			return cache.newLocation
 		}
 
-		cache.new_loc = l
+		cache.newLocation = l
 		if !cache.value.IsValid() {
-			cache.value = reflect.New(value_of.Type())
+			cache.value = reflect.New(valueOf.Type())
 		}
-		cache.value.Elem().Set(value_of)
+		cache.value.Elem().Set(valueOf)
 	}
 
 	//	ctx.debug("[RETURN %d %v]\n", l, err)
@@ -387,12 +387,12 @@ type Options struct {
 // Here: result is pointer to value,
 // str is string to parse,
 // params is parsing parameters.
-// Function returns new_location - location after the parsed string. On errors err != nil.
-func Parse(result interface{}, str []byte, params *Options) (new_location int, err error) {
-	type_of := reflect.TypeOf(result)
-	value_of := reflect.ValueOf(result)
+// Function returns newLocation - location after the parsed string. On errors err != nil.
+func Parse(result interface{}, str []byte, params *Options) (newLocation int, err error) {
+	typeOf := reflect.TypeOf(result)
+	valueOf := reflect.ValueOf(result)
 
-	if type_of.Kind() != reflect.Ptr {
+	if typeOf.Kind() != reflect.Ptr {
 		return -1, errors.New("Invalid argument for Parse: waiting for pointer")
 	}
 
@@ -400,7 +400,7 @@ func Parse(result interface{}, str []byte, params *Options) (new_location int, e
 		params = &Options{SkipWhite: SkipSpaces}
 	}
 
-	p, err := compile(type_of.Elem(), reflect.StructTag(""))
+	p, err := compile(typeOf.Elem(), reflect.StructTag(""))
 	if err != nil {
 		return -1, err
 	}
@@ -412,12 +412,12 @@ func Parse(result interface{}, str []byte, params *Options) (new_location int, e
 	C.recursiveLocations = make(map[int]bool)
 
 	e := Error{str, 0, ""}
-	new_location = C.parse(value_of.Elem(), p, 0, &e)
-	if new_location < 0 {
-		return new_location, e
+	newLocation = C.parse(valueOf.Elem(), p, 0, &e)
+	if newLocation < 0 {
+		return newLocation, e
 	}
 
-	return new_location, nil
+	return newLocation, nil
 }
 
 // NewOptions creates new default parameters object.
@@ -496,7 +496,7 @@ func SkipCPPComment(str []byte, loc int) int {
 	return SkipOneLineComment(str, loc, "//")
 }
 
-// SkipCComent skips C style comment: "/* ..... */"
+// SkipCComment skips C style comment: "/* ..... */"
 func SkipCComment(str []byte, loc int) int {
 	return SkipMultilineComment(str, loc, "/*", "*/", false)
 }

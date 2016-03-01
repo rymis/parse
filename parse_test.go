@@ -10,7 +10,7 @@ import (
 type myEOF struct {
 }
 
-func (self *myEOF) ParseValue(str []byte, loc int) (int, error) {
+func (eof *myEOF) ParseValue(str []byte, loc int) (int, error) {
 	if loc < len(str) {
 		fmt.Printf("[ERROR] ##### EOF checker!\n")
 		return -1, errors.New("Waiting for end of file")
@@ -20,7 +20,7 @@ func (self *myEOF) ParseValue(str []byte, loc int) (int, error) {
 	return 0, nil
 }
 
-func (self *myEOF) WriteValue(out io.Writer) error {
+func (eof *myEOF) WriteValue(out io.Writer) error {
 	fmt.Printf("##### EOF writer!\n")
 	return nil
 }
@@ -28,15 +28,15 @@ func (self *myEOF) WriteValue(out io.Writer) error {
 type tmp struct {
 	A   string  `regexp:"[hH]ello"`
 	_   string  `literal:","`
-	_   *string `set:"Set_w" parse:"?" regexp:"[wW]orld"`
+	_   *string `set:"SetW" parse:"?" regexp:"[wW]orld"`
 	Loc int     `parse:"#"`
 	w   string
 	EOF myEOF
 }
 
-func (self *tmp) Set_w(v *string) error {
-	self.w = *v
-	fmt.Printf("SET: %s\n", self.w)
+func (t *tmp) SetW(v *string) error {
+	t.w = *v
+	fmt.Printf("SET: %s\n", t.w)
 	return nil
 }
 
@@ -48,7 +48,7 @@ ATOM <- '(' EXPR ')' / NUMBER
 NUMBER <- [1-9][0-9]*
 */
 
-type braced_expression struct {
+type bracedExpression struct {
 	_    string `regexp:"\\("`
 	Expr *expression
 	_    string `regexp:"\\)"`
@@ -57,15 +57,15 @@ type braced_expression struct {
 type atom struct {
 	FirstOf
 
-	Expr   braced_expression
+	Expr   bracedExpression
 	Number int64
 }
 
-func (self atom) p() {
-	if self.Field == "Number" {
-		print(self.Number)
+func (a atom) p() {
+	if a.Field == "Number" {
+		print(a.Number)
 	} else {
-		self.Expr.Expr.p()
+		a.Expr.Expr.p()
 	}
 }
 
@@ -77,14 +77,14 @@ type mexpression struct {
 	} `parse:"*"`
 }
 
-func (self mexpression) p() {
-	self.First.p()
+func (m mexpression) p() {
+	m.First.p()
 	print(" ")
 
-	for i := 0; i < len(self.Rest); i++ {
-		self.Rest[i].Arg.p()
+	for i := 0; i < len(m.Rest); i++ {
+		m.Rest[i].Arg.p()
 		print(" ")
-		print(self.Rest[i].Op)
+		print(m.Rest[i].Op)
 	}
 }
 
@@ -96,15 +96,15 @@ type expression struct {
 	} `parse:"*"`
 }
 
-func (self expression) p() {
-	self.First.p()
+func (e expression) p() {
+	e.First.p()
 	print(" ")
 
-	for i := 0; i < len(self.Rest); i++ {
+	for i := 0; i < len(e.Rest); i++ {
 		print(" ")
-		self.Rest[i].Arg.p()
+		e.Rest[i].Arg.p()
 		print(" ")
-		print(self.Rest[i].Op)
+		print(e.Rest[i].Op)
 	}
 }
 
@@ -114,15 +114,15 @@ A ← 'a' A? 'b'
 B ← 'b' B? 'c'
 */
 
-type abc_S struct {
+type abcS struct {
 	_ struct {
-		A abc_A
+		A abcA
 		C string `regexp:"c"`
 	} `parse:"&"`
 	A []struct {
 		A string `regexp:"a"`
 	} `parse:"+"`
-	B abc_B
+	B abcB
 	_ struct {
 		FirstOf
 		A string `regexp:"a"`
@@ -131,15 +131,15 @@ type abc_S struct {
 	} `parse:"!"`
 }
 
-type abc_A struct {
+type abcA struct {
 	A  string `regexp:"a"`
-	A1 *abc_A `parse:"?"`
+	A1 *abcA `parse:"?"`
 	B  string `regexp:"b"`
 }
 
-type abc_B struct {
+type abcB struct {
 	B  string `regexp:"b"`
-	B1 *abc_B `parse:"?"`
+	B1 *abcB `parse:"?"`
 	C  string `regexp:"c"`
 }
 
@@ -166,7 +166,7 @@ func TestParse(t *testing.T) {
 	}
 
 	for _, s := range []string{"aabbcc", "", "abc", "aabbc", "aabcc"} {
-		var g abc_S
+		var g abcS
 		_, e = Parse(&g, []byte(s), &Options{PackratEnabled: true})
 		fmt.Printf("EXPR: %s\n", s)
 		if e != nil {

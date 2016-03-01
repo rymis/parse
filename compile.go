@@ -1,7 +1,6 @@
 package parse
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -79,7 +78,7 @@ func (par *proxyParser) IsTerm() bool {
 	return par.p.IsTerm()
 }
 
-func (par *proxyParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+func (par *proxyParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
 	if par.p == nil {
 		panic("nil parser")
 	}
@@ -219,7 +218,7 @@ func compileType(typeOf reflect.Type, tag reflect.StructTag) (p parser, err erro
 			return &sequenceParser{Fields: nil}, nil
 		}
 
-		fields := make([]field, 0)
+		fields := []field{}
 		if typeOf.Field(0).Type == reflect.TypeOf(FirstOf{}) { // FirstOf
 			for i := 1; i < typeOf.NumField(); i++ {
 				err = appendField(typeOf, &fields, i)
@@ -229,17 +228,17 @@ func compileType(typeOf reflect.Type, tag reflect.StructTag) (p parser, err erro
 			}
 
 			return &firstOfParser{Fields: fields}, nil
-		} else {
-			for i := 0; i < typeOf.NumField(); i++ {
-				err = appendField(typeOf, &fields, i)
-
-				if err != nil {
-					return nil, err
-				}
-			}
-
-			return &sequenceParser{Fields: fields}, nil
 		}
+
+		for i := 0; i < typeOf.NumField(); i++ {
+			err = appendField(typeOf, &fields, i)
+
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return &sequenceParser{Fields: fields}, nil
 
 	case reflect.String:
 		rx := tag.Get("regexp")
@@ -247,12 +246,12 @@ func compileType(typeOf reflect.Type, tag reflect.StructTag) (p parser, err erro
 			lit := tag.Get("literal")
 			if lit == "" {
 				return &stringParser{}, nil
-			} else {
-				return newLiteralParser(lit), nil
 			}
-		} else {
-			return newRegexpParser(rx)
+
+			return newLiteralParser(lit), nil
 		}
+
+		return newRegexpParser(rx)
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		opt := tag.Get("parse")
@@ -300,6 +299,6 @@ func compileType(typeOf reflect.Type, tag reflect.StructTag) (p parser, err erro
 
 		return &ptrParser{Parser: p, Optional: (tag.Get("parse") == "?")}, nil
 	default:
-		return nil, errors.New(fmt.Sprintf("Invalid argument for Compile: unsupported type '%v'", typeOf))
+		return nil, fmt.Errorf("Invalid argument for Compile: unsupported type '%v'", typeOf)
 	}
 }

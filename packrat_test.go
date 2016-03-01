@@ -6,87 +6,87 @@ import (
 )
 
 /* Left recursion:
-EXPR <- EXPR ([+-] MUL)? / MUL
-MUL  <- MUL ([*%/] ATOM)? / ATOM
-ATOM <- '(' EXPR ')' / Int64
+Expression <- Expression ([+-] MultiplicativeExpression)? / MultiplicativeExpression
+MultiplicativeExpression  <- MultiplicativeExpression ([*%/] Atom)? / Atom
+Atom <- '(' Expression ')' / Int64
 */
 
-type BEXPR struct {
+type BracedExpression struct {
 	_    string `regexp:"\\("`
-	Expr EXPR
+	Expr Expression
 	_    string `regexp:"\\)"`
 }
 
-type ATOM struct {
+type Atom struct {
 	FirstOf
-	Expr BEXPR
+	Expr BracedExpression
 	Val  int64
 }
 
-type MUL_1 struct {
-	Mul MUL
+type Mul1 struct {
+	Mul MultiplicativeExpression
 	Arg *struct {
 		Op   string `regexp:"[/%*]"`
-		Atom ATOM
+		Atom Atom
 	} `parse:"?"`
 }
 
-type MUL struct {
+type MultiplicativeExpression struct {
 	FirstOf
-	Mul  *MUL_1
-	Atom ATOM
+	Mul  *Mul1
+	Atom Atom
 }
 
-func print_mul(m *MUL) {
+func printMul(m *MultiplicativeExpression) {
 	if m.Field == "Mul" {
 		if m.Mul.Arg != nil {
 			fmt.Printf("%s(", m.Mul.Arg.Op)
-			print_mul(&m.Mul.Mul)
+			printMul(&m.Mul.Mul)
 
 			if m.Mul.Arg.Atom.Field == "Val" {
 				fmt.Printf("%d ", m.Mul.Arg.Atom.Val)
 			} else {
-				print_expr(&m.Mul.Arg.Atom.Expr.Expr)
+				printExpression(&m.Mul.Arg.Atom.Expr.Expr)
 			}
 			fmt.Print(")")
 		} else {
-			print_mul(&m.Mul.Mul)
+			printMul(&m.Mul.Mul)
 		}
 	} else {
 		if m.Atom.Field == "Val" {
 			fmt.Printf("%d ", m.Atom.Val)
 		} else {
-			print_expr(&m.Atom.Expr.Expr)
+			printExpression(&m.Atom.Expr.Expr)
 		}
 	}
 }
 
-type EXPR_1 struct {
-	Expr EXPR
+type Expression1 struct {
+	Expr Expression
 	Arg  *struct {
 		Op  string `regexp:"[-+]"`
-		Mul MUL
+		Mul MultiplicativeExpression
 	} `parse:"?"`
 }
 
-type EXPR struct {
+type Expression struct {
 	FirstOf
-	Expr *EXPR_1
-	Mul  *MUL
+	Expr *Expression1
+	Mul  *MultiplicativeExpression
 }
 
-func print_expr(e *EXPR) {
+func printExpression(e *Expression) {
 	if e.Field == "Expr" {
 		if e.Expr.Arg != nil {
 			fmt.Printf("%s(", e.Expr.Arg.Op)
-			print_expr(&e.Expr.Expr)
-			print_mul(&e.Expr.Arg.Mul)
+			printExpression(&e.Expr.Expr)
+			printMul(&e.Expr.Arg.Mul)
 			fmt.Print(")")
 		} else {
-			print_expr(&e.Expr.Expr)
+			printExpression(&e.Expr.Expr)
 		}
 	} else {
-		print_mul(e.Mul)
+		printMul(e.Mul)
 	}
 }
 
@@ -148,20 +148,20 @@ func TestPackrat(t *testing.T) {
 	var e error
 
 	if true {
-		var expr EXPR
+		var expr Expression
 		l, e = Parse(&expr, []byte("  10 + 5 - 3 * 2 % 2"), params)
 
 		fmt.Printf("New location: %d, error: %v\n", l, e)
-		print_expr(&expr)
+		printExpression(&expr)
 		println("")
 	}
 
 	if true {
-		var expr EXPR
+		var expr Expression
 		l, e = Parse(&expr, []byte("1 * 2 * 3 * 4 * 5 + 2 * 3 * 4 * 5 * 6 + 3 * 4 * 5 * 6 * 7 + 4 * 5 * 6 * 7 * 8 + 5 * 6 * 7 * 8 * 9"), params)
 
 		fmt.Printf("New location: %d, error: %v\n", l, e)
-		print_expr(&expr)
+		printExpression(&expr)
 		println("")
 	}
 

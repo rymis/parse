@@ -25,10 +25,10 @@ type parser interface {
 	SetString(nm string)
 
 	// Parse function.
-	ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int
+	ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int
 
 	// Write value to output stream.
-	WriteValue(out io.Writer, value_of reflect.Value) error
+	WriteValue(out io.Writer, valueOf reflect.Value) error
 
 	// Check if this parser parses terminal symbol (doesn't contain sub-parsers)
 	IsTerm() bool
@@ -37,7 +37,7 @@ type parser interface {
 	// This function must add all parsers with offset 0 to the set of parsers and
 	// return two values: is left recursion possible (and if possible execution will be stopped)
 	// and could parser parse empty value.
-	IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool)
+	IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool)
 
 	// Check if rule left recursive:
 	IsLR() int
@@ -46,7 +46,7 @@ type parser interface {
 }
 
 // Utility function to call IsLRPossible
-func isLRPossible(p parser, parsers []parser) (possible bool, can_parse_empty bool) {
+func isLRPossible(p parser, parsers []parser) (possible bool, canParseEmpty bool) {
 	lr := p.IsLR()
 	if lr < 0 {
 		possible = true
@@ -64,7 +64,7 @@ func isLRPossible(p parser, parsers []parser) (possible bool, can_parse_empty bo
 		}
 	}
 
-	possible, can_parse_empty = p.IsLRPossible(append(parsers, p))
+	possible, canParseEmpty = p.IsLRPossible(append(parsers, p))
 	if possible {
 		p.SetLR(-1)
 	} else {
@@ -81,28 +81,28 @@ type idHolder struct {
 	lr   int
 }
 
-func (self *idHolder) SetID(id uint) {
-	self.id = id
+func (par *idHolder) SetID(id uint) {
+	par.id = id
 }
 
-func (self *idHolder) ID() uint {
-	return self.id
+func (par *idHolder) ID() uint {
+	return par.id
 }
 
-func (self *idHolder) String() string {
-	return self.name
+func (par *idHolder) String() string {
+	return par.name
 }
 
-func (self *idHolder) SetString(nm string) {
-	self.name = nm
+func (par *idHolder) SetString(nm string) {
+	par.name = nm
 }
 
-func (self *idHolder) IsLR() int {
-	return self.lr
+func (par *idHolder) IsLR() int {
+	return par.lr
 }
 
-func (self *idHolder) SetLR(v int) {
-	self.lr = v
+func (par *idHolder) SetLR(v int) {
+	par.lr = v
 }
 
 type terminal struct {
@@ -113,11 +113,11 @@ type nonTerminal struct {
 	terminal bool
 }
 
-func (self *terminal) IsTerm() bool {
+func (par *terminal) IsTerm() bool {
 	return true
 }
 
-func (self *nonTerminal) IsTerm() bool {
+func (par *nonTerminal) IsTerm() bool {
 	return false
 }
 
@@ -128,14 +128,14 @@ type boolParser struct {
 	terminal
 }
 
-var boolError string = "Waiting for boolean value"
+var boolError = "Waiting for boolean value"
 
-func (self *boolParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+func (par *boolParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
 	if strAt(ctx.str, location, "true") {
-		value_of.SetBool(true)
+		valueOf.SetBool(true)
 		location += 4
 	} else if strAt(ctx.str, location, "false") {
-		value_of.SetBool(false)
+		valueOf.SetBool(false)
 		location += 5
 	} else {
 		err.Location = location
@@ -157,9 +157,9 @@ func (self *boolParser) ParseValue(ctx *parseContext, value_of reflect.Value, lo
 	return location
 }
 
-func (self *boolParser) WriteValue(out io.Writer, value_of reflect.Value) error {
+func (par *boolParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
 	var err error
-	if value_of.Bool() {
+	if valueOf.Bool() {
 		_, err = out.Write([]byte("true"))
 	} else {
 		_, err = out.Write([]byte("false"))
@@ -168,7 +168,7 @@ func (self *boolParser) WriteValue(out io.Writer, value_of reflect.Value) error 
 	return err
 }
 
-func (self *boolParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+func (par *boolParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
 	return false, false
 }
 
@@ -180,31 +180,31 @@ type regexpParser struct {
 	err    string
 }
 
-func (self *regexpParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	m := self.Regexp.Find(ctx.str[location:])
+func (par *regexpParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	m := par.Regexp.Find(ctx.str[location:])
 	if m == nil {
 		err.Location = location
-		err.Message = self.err
+		err.Message = par.err
 		return -1
 	}
 
-	value_of.SetString(string(m))
+	valueOf.SetString(string(m))
 
 	return location + len(m)
 }
 
-func (self *regexpParser) WriteValue(out io.Writer, value_of reflect.Value) error {
-	s := value_of.String()
-	if self.Regexp.MatchString(s) {
+func (par *regexpParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
+	s := valueOf.String()
+	if par.Regexp.MatchString(s) {
 		_, err := out.Write([]byte(s))
 		return err
 	}
 
-	return errors.New(fmt.Sprintf("String `%s' does not match regular expression %v", s, self.Regexp))
+	return fmt.Errorf("String `%s' does not match regular expression %v", s, par.Regexp)
 }
 
-func (self *regexpParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
-	return false, self.Regexp.MatchString("")
+func (par *regexpParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
+	return false, par.Regexp.MatchString("")
 }
 
 func newRegexpParser(rx string) (parser, error) {
@@ -279,7 +279,7 @@ func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int)
 				return 0, -1
 			}
 
-			var r rune = 0
+			var r rune
 			for i := 0; i < 3; i++ {
 				if ctx.str[location+i] >= '0' && ctx.str[location+i] <= '7' {
 					r = r*8 + rune(ctx.str[location+i]-'0')
@@ -310,7 +310,7 @@ func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int)
 
 			location++
 
-			var r rune = 0
+			var r rune
 			for i := 0; i < l; i++ {
 				if ctx.str[location+i] >= '0' && ctx.str[location+i] <= '9' {
 					r = r*16 + rune(ctx.str[location+i]-'0')
@@ -332,21 +332,21 @@ func (ctx *parseContext) parseUnicodeValue(location int, err *Error) (rune, int)
 			}
 
 			return r, location + l
-		} else {
-			err.Location = location
-			err.Message = "Invalid escaped char"
-			return 0, -1
-		}
-	} else {
-		r, l := utf8.DecodeRune(ctx.str[location:])
-		if l <= 0 {
-			err.Location = location
-			err.Message = "Invalid Unicode character"
-			return 0, -1
 		}
 
-		return r, location + l
+		err.Location = location
+		err.Message = "Invalid escaped char"
+		return 0, -1
 	}
+
+	r, l := utf8.DecodeRune(ctx.str[location:])
+	if l <= 0 {
+		err.Location = location
+		err.Message = "Invalid Unicode character"
+		return 0, -1
+	}
+
+	return r, location + l
 }
 
 // Parse Go string and return processed string:
@@ -403,23 +403,23 @@ func (ctx *parseContext) parseString(location int, err *Error) (string, int) {
 	return "", -1
 }
 
-func (self *stringParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+func (par *stringParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
 	s, nl := ctx.parseString(location, err)
 	if nl < 0 {
 		return nl
 	}
 
-	value_of.SetString(s)
+	valueOf.SetString(s)
 
 	return nl
 }
 
-func (self *stringParser) WriteValue(out io.Writer, value_of reflect.Value) error {
-	_, err := out.Write(strconv.AppendQuote(nil, value_of.String()))
+func (par *stringParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
+	_, err := out.Write(strconv.AppendQuote(nil, valueOf.String()))
 	return err
 }
 
-func (self *stringParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+func (par *stringParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
 	return false, false
 }
 
@@ -431,24 +431,24 @@ type literalParser struct {
 	msg     string
 }
 
-func (self *literalParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	if strAt(ctx.str, location, self.Literal) {
-		value_of.SetString(self.Literal)
-		return location + len(self.Literal)
-	} else {
-		err.Message = self.msg
-		err.Location = location
-		return -1
+func (par *literalParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	if strAt(ctx.str, location, par.Literal) {
+		valueOf.SetString(par.Literal)
+		return location + len(par.Literal)
 	}
+
+	err.Message = par.msg
+	err.Location = location
+	return -1
 }
 
-func (self *literalParser) WriteValue(out io.Writer, value_of reflect.Value) error {
-	_, err := out.Write([]byte(self.Literal))
+func (par *literalParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
+	_, err := out.Write([]byte(par.Literal))
 	return err
 }
 
-func (self *literalParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
-	return false, len(self.Literal) == 0
+func (par *literalParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
+	return false, len(par.Literal) == 0
 }
 
 func newLiteralParser(lit string) parser {
@@ -478,7 +478,7 @@ func (ctx *parseContext) parseUint64(location int, size uint, err *Error) (uint6
 		return 0, -1
 	}
 
-	var res uint64 = 0
+	var res uint64
 	if ctx.str[location] == '0' {
 		if location+1 < len(ctx.str) && (ctx.str[location+1] == 'x' || ctx.str[location+1] == 'X') { // HEX
 			location += 2
@@ -511,32 +511,33 @@ func (ctx *parseContext) parseUint64(location int, size uint, err *Error) (uint6
 				err.Message = "Integer overflow"
 				err.Location = location
 				return 0, -1
-			} else {
-				return res, location
-			}
-		} else { // OCT
-			for ; location < len(ctx.str); location++ {
-				if (res & 0xe000000000000000) != 0 {
-					err.Message = "Integer overflow"
-					err.Location = location
-					return 0, -1
-				}
-
-				if ctx.str[location] >= '0' && ctx.str[location] <= '7' {
-					res = (res << 3) + uint64(ctx.str[location]-'0')
-				} else {
-					break
-				}
 			}
 
-			if ctx.checkUintOverflow(res, location, size) {
+			return res, location
+		}
+
+		// OCT
+		for ; location < len(ctx.str); location++ {
+			if (res & 0xe000000000000000) != 0 {
 				err.Message = "Integer overflow"
 				err.Location = location
 				return 0, -1
+			}
+
+			if ctx.str[location] >= '0' && ctx.str[location] <= '7' {
+				res = (res << 3) + uint64(ctx.str[location]-'0')
 			} else {
-				return res, location
+				break
 			}
 		}
+
+		if ctx.checkUintOverflow(res, location, size) {
+			err.Message = "Integer overflow"
+			err.Location = location
+			return 0, -1
+		}
+
+		return res, location
 	} else if ctx.str[location] > '0' && ctx.str[location] <= '9' {
 		var r8 uint64
 		for ; location < len(ctx.str); location++ {
@@ -565,9 +566,9 @@ func (ctx *parseContext) parseUint64(location int, size uint, err *Error) (uint6
 			err.Message = "Integer overflow"
 			err.Location = location
 			return 0, -1
-		} else {
-			return res, location
 		}
+
+		return res, location
 	}
 
 	err.Message = "Waiting for integer literal"
@@ -610,7 +611,7 @@ func (ctx *parseContext) parseInt64(location int, size uint, err *Error) (int64,
 	return res, l
 }
 
-var floatRegexp *regexp.Regexp = regexp.MustCompile(`^[-+]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][-+]?[0-9]+)?`)
+var floatRegexp = regexp.MustCompile(`^[-+]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][-+]?[0-9]+)?`)
 
 func (ctx *parseContext) parseFloat(location int, size int, err *Error) (float64, int) {
 	m := floatRegexp.Find(ctx.str[location:])
@@ -646,8 +647,8 @@ type floatParser struct {
 	terminal
 }
 
-func (self *intParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	if value_of.Type().Bits() == 32 && location < len(ctx.str) && ctx.str[location] == '\'' {
+func (par *intParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	if valueOf.Type().Bits() == 32 && location < len(ctx.str) && ctx.str[location] == '\'' {
 		location++
 		r, location := ctx.parseUnicodeValue(location, err)
 		if location < 0 {
@@ -661,64 +662,64 @@ func (self *intParser) ParseValue(ctx *parseContext, value_of reflect.Value, loc
 		}
 		location++
 
-		value_of.SetInt(int64(r))
+		valueOf.SetInt(int64(r))
 
 		return location
 	}
 
-	r, l := ctx.parseInt64(location, uint(value_of.Type().Bits()), err)
+	r, l := ctx.parseInt64(location, uint(valueOf.Type().Bits()), err)
 	if l < 0 {
 		return l
 	}
 
-	value_of.SetInt(r)
+	valueOf.SetInt(r)
 	return l
 }
 
-func (self *intParser) WriteValue(out io.Writer, value_of reflect.Value) error {
-	_, err := out.Write(strconv.AppendInt(nil, value_of.Int(), 10))
+func (par *intParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
+	_, err := out.Write(strconv.AppendInt(nil, valueOf.Int(), 10))
 	return err
 }
 
-func (self *intParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+func (par *intParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
 	return false, false
 }
 
-func (self *uintParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	r, l := ctx.parseUint64(location, uint(value_of.Type().Bits()), err)
+func (par *uintParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	r, l := ctx.parseUint64(location, uint(valueOf.Type().Bits()), err)
 	if l < 0 {
 		return l
 	}
 
-	value_of.SetUint(r)
+	valueOf.SetUint(r)
 	return l
 }
 
-func (self *uintParser) WriteValue(out io.Writer, value_of reflect.Value) error {
-	_, err := out.Write(strconv.AppendUint(nil, value_of.Uint(), 10))
+func (par *uintParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
+	_, err := out.Write(strconv.AppendUint(nil, valueOf.Uint(), 10))
 	return err
 }
 
-func (self *uintParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+func (par *uintParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
 	return false, false
 }
 
-func (self *floatParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	r, l := ctx.parseFloat(location, value_of.Type().Bits(), err)
+func (par *floatParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	r, l := ctx.parseFloat(location, valueOf.Type().Bits(), err)
 	if l < 0 {
 		return l
 	}
 
-	value_of.SetFloat(r)
+	valueOf.SetFloat(r)
 	return l
 }
 
-func (self *floatParser) WriteValue(out io.Writer, value_of reflect.Value) error {
-	_, err := out.Write(strconv.AppendFloat(nil, value_of.Float(), 'e', -1, value_of.Type().Bits()))
+func (par *floatParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
+	_, err := out.Write(strconv.AppendFloat(nil, valueOf.Float(), 'e', -1, valueOf.Type().Bits()))
 	return err
 }
 
-func (self *floatParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+func (par *floatParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
 	return false, false
 }
 
@@ -728,16 +729,16 @@ type locationParser struct {
 	terminal
 }
 
-func (self *locationParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	value_of.SetInt(int64(location))
+func (par *locationParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	valueOf.SetInt(int64(location))
 	return location
 }
 
-func (self *locationParser) WriteValue(out io.Writer, value_of reflect.Value) error {
+func (par *locationParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
 	return nil
 }
 
-func (self *locationParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+func (par *locationParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
 	return false, true
 }
 
@@ -750,31 +751,31 @@ type field struct {
 	Type  reflect.Type
 }
 
-func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+func (par field) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
 	var f reflect.Value
 	var l int
 
-	if self.Index < 0 {
-		f = reflect.New(self.Type).Elem()
+	if par.Index < 0 {
+		f = reflect.New(par.Type).Elem()
 	} else {
-		f = value_of.Field(self.Index)
+		f = valueOf.Field(par.Index)
 	}
 
 	if !f.CanSet() {
-		panic(fmt.Sprintf("Can't set field '%v.%s'", value_of.Type(), self.Name))
+		panic(fmt.Sprintf("Can't set field '%v.%s'", valueOf.Type(), par.Name))
 	}
 
-	l = ctx.parse(f, self.Parse, location, err)
-	if (self.Flags & fieldNotAny) != 0 {
+	l = ctx.parse(f, par.Parse, location, err)
+	if (par.Flags & fieldNotAny) != 0 {
 		if l >= 0 {
-			err.Message = fmt.Sprintf("Unexpected input: %v", self.Parse)
+			err.Message = fmt.Sprintf("Unexpected input: %v", par.Parse)
 			err.Location = location
 			return -1
 		}
 
 		// Don't change the location
 		return location
-	} else if (self.Flags & fieldFollowedBy) != 0 {
+	} else if (par.Flags & fieldFollowedBy) != 0 {
 		if l < 0 {
 			return l
 		}
@@ -785,19 +786,19 @@ func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location
 			return l
 		}
 
-		if self.Set != "" {
-			method := value_of.MethodByName(self.Set)
-			if !method.IsValid() && value_of.CanAddr() {
-				method = value_of.Addr().MethodByName(self.Set)
+		if par.Set != "" {
+			method := valueOf.MethodByName(par.Set)
+			if !method.IsValid() && valueOf.CanAddr() {
+				method = valueOf.Addr().MethodByName(par.Set)
 			}
 
 			if !method.IsValid() {
-				panic(fmt.Sprintf("Can't find `%s' method", self.Set))
+				panic(fmt.Sprintf("Can't find `%s' method", par.Set))
 			}
 
 			mtp := method.Type()
 			if mtp.NumIn() != 1 || mtp.NumOut() != 1 || mtp.In(0) != f.Type() || mtp.Out(0).Name() != "error" {
-				panic(fmt.Sprintf("Invalid method `%s' signature. Waiting for func (%v) error", self.Set, self.Parse))
+				panic(fmt.Sprintf("Invalid method `%s' signature. Waiting for func (%v) error", par.Set, par.Parse))
 			}
 
 			resv := method.Call([]reflect.Value{f})[0]
@@ -812,28 +813,28 @@ func (self field) ParseValue(ctx *parseContext, value_of reflect.Value, location
 	}
 }
 
-func (self field) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
-	possible, can_parse_empty = isLRPossible(self.Parse, parsers)
+func (par field) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
+	possible, canParseEmpty = isLRPossible(par.Parse, parsers)
 	if possible {
 		return
 	}
 
-	if (self.Flags & (fieldNotAny | fieldFollowedBy)) != 0 {
-		can_parse_empty = true
+	if (par.Flags & (fieldNotAny | fieldFollowedBy)) != 0 {
+		canParseEmpty = true
 	}
 
 	return
 }
 
-func (self field) WriteValue(out io.Writer, value_of reflect.Value) error {
-	if (self.Flags & (fieldNotAny | fieldFollowedBy)) != 0 {
+func (par field) WriteValue(out io.Writer, valueOf reflect.Value) error {
+	if (par.Flags & (fieldNotAny | fieldFollowedBy)) != 0 {
 		return nil
 	}
 
-	if self.Index < 0 { // We can not out this value in all cases but if it was literal we can do it
+	if par.Index < 0 { // We can not out this value in all cases but if it was literal we can do it
 		// TODO: Check if it is string and output only in case it is literal
-		p := self.Parse
-		v := value_of
+		p := par.Parse
+		v := valueOf
 		for {
 			switch tp := p.(type) {
 			case *ptrParser:
@@ -855,8 +856,8 @@ func (self field) WriteValue(out io.Writer, value_of reflect.Value) error {
 			}
 		}
 	} else {
-		f := value_of.Field(self.Index)
-		return self.Parse.WriteValue(out, f)
+		f := valueOf.Field(par.Index)
+		return par.Parse.WriteValue(out, f)
 	}
 }
 
@@ -871,9 +872,9 @@ type sequenceParser struct {
 	Fields []field
 }
 
-func (self *sequenceParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	for _, f := range self.Fields {
-		location = f.ParseValue(ctx, value_of, location, err)
+func (par *sequenceParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	for _, f := range par.Fields {
+		location = f.ParseValue(ctx, valueOf, location, err)
 		if location < 0 {
 			return location
 		}
@@ -882,10 +883,10 @@ func (self *sequenceParser) ParseValue(ctx *parseContext, value_of reflect.Value
 	return location
 }
 
-func (self *sequenceParser) WriteValue(out io.Writer, value_of reflect.Value) error {
+func (par *sequenceParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
 	var err error
-	for _, f := range self.Fields {
-		err = f.WriteValue(out, value_of)
+	for _, f := range par.Fields {
+		err = f.WriteValue(out, valueOf)
 		if err != nil {
 			return err
 		}
@@ -893,8 +894,8 @@ func (self *sequenceParser) WriteValue(out io.Writer, value_of reflect.Value) er
 	return nil
 }
 
-func (self *sequenceParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
-	for _, f := range self.Fields {
+func (par *sequenceParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
+	for _, f := range par.Fields {
 		p, can := f.IsLRPossible(parsers)
 		if p {
 			// Recursion has been found:
@@ -917,52 +918,52 @@ type firstOfParser struct {
 	Fields []field
 }
 
-func (self *firstOfParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	max_error := Error{ctx.str, location - 1, "No choices in first of"}
+func (par *firstOfParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	maxError := Error{ctx.str, location - 1, "No choices in first of"}
 	var l int
 
-	for _, f := range self.Fields {
-		l = f.ParseValue(ctx, value_of, location, err)
+	for _, f := range par.Fields {
+		l = f.ParseValue(ctx, valueOf, location, err)
 		if l >= 0 {
-			value_of.FieldByName("FirstOf").FieldByName("Field").SetString(f.Name)
+			valueOf.FieldByName("FirstOf").FieldByName("Field").SetString(f.Name)
 			return l
-		} else {
-			if err.Location > max_error.Location {
-				max_error.Location = err.Location
-				max_error.Str = err.Str
-				max_error.Message = err.Message
-			}
+		}
+
+		if err.Location > maxError.Location {
+			maxError.Location = err.Location
+			maxError.Str = err.Str
+			maxError.Message = err.Message
 		}
 	}
 
-	err.Message = max_error.Message
-	err.Location = max_error.Location
+	err.Message = maxError.Message
+	err.Location = maxError.Location
 	return -1
 }
 
-func (self *firstOfParser) WriteValue(out io.Writer, value_of reflect.Value) error {
+func (par *firstOfParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
 	var err error
-	nm := value_of.Field(0).Field(0).String()
+	nm := valueOf.Field(0).Field(0).String()
 
 	if nm == "" {
 		return errors.New("Field is not selected in FirstOf")
 	}
 
-	for _, f := range self.Fields {
+	for _, f := range par.Fields {
 		if f.Name == nm {
-			err = f.WriteValue(out, value_of)
+			err = f.WriteValue(out, valueOf)
 			return err
 		}
 	}
 
-	return errors.New(fmt.Sprintf("Field `%s' is not present in %v", nm, value_of.Type()))
+	return fmt.Errorf("Field `%s' is not present in %v", nm, valueOf.Type())
 }
 
-func (self *firstOfParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
-	can_parse_empty = false
+func (par *firstOfParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
+	canParseEmpty = false
 	possible = false
 
-	for _, f := range self.Fields {
+	for _, f := range par.Fields {
 		p, can := f.IsLRPossible(parsers)
 		if p {
 			possible = true
@@ -970,7 +971,7 @@ func (self *firstOfParser) IsLRPossible(parsers []parser) (possible bool, can_pa
 		}
 
 		if can {
-			can_parse_empty = true
+			canParseEmpty = true
 		}
 	}
 
@@ -986,18 +987,18 @@ type sliceParser struct {
 	Min       int
 }
 
-func (self *sliceParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+func (par *sliceParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
 	var v reflect.Value
 
-	value_of.SetLen(0)
-	tp := value_of.Type().Elem()
+	valueOf.SetLen(0)
+	tp := valueOf.Type().Elem()
 	for {
 		v = reflect.New(tp).Elem()
 		var nl int
 
-		nl = ctx.parse(v, self.Parser, location, err)
+		nl = ctx.parse(v, par.Parser, location, err)
 		if nl < 0 {
-			if value_of.Len() >= self.Min {
+			if valueOf.Len() >= par.Min {
 				return location
 			}
 
@@ -1009,13 +1010,13 @@ func (self *sliceParser) ParseValue(ctx *parseContext, value_of reflect.Value, l
 		}
 
 		location = nl
-		value_of.Set(reflect.Append(value_of, v))
+		valueOf.Set(reflect.Append(valueOf, v))
 
-		if len(self.Delimiter) > 0 {
+		if len(par.Delimiter) > 0 {
 			nl = ctx.skipWS(location)
 
-			if strAt(ctx.str, nl, self.Delimiter) {
-				location = ctx.skipWS(nl + len(self.Delimiter))
+			if strAt(ctx.str, nl, par.Delimiter) {
+				location = ctx.skipWS(nl + len(par.Delimiter))
 			} else {
 				// Here we've got at least one parsed member, so it could not be an error.
 				return nl
@@ -1024,23 +1025,23 @@ func (self *sliceParser) ParseValue(ctx *parseContext, value_of reflect.Value, l
 	}
 }
 
-func (self *sliceParser) WriteValue(out io.Writer, value_of reflect.Value) error {
+func (par *sliceParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
 	var err error
 
-	if value_of.Len() < self.Min {
+	if valueOf.Len() < par.Min {
 		return errors.New("Not enough members in slice")
 	}
 
-	for i := 0; i < value_of.Len(); i++ {
-		if i > 0 && len(self.Delimiter) > 0 {
-			_, err = out.Write([]byte(self.Delimiter))
+	for i := 0; i < valueOf.Len(); i++ {
+		if i > 0 && len(par.Delimiter) > 0 {
+			_, err = out.Write([]byte(par.Delimiter))
 			if err != nil {
 				return err
 			}
 		}
 
-		v := value_of.Index(i)
-		err = self.Parser.WriteValue(out, v)
+		v := valueOf.Index(i)
+		err = par.Parser.WriteValue(out, v)
 		if err != nil {
 			return err
 		}
@@ -1049,10 +1050,10 @@ func (self *sliceParser) WriteValue(out io.Writer, value_of reflect.Value) error
 	return nil
 }
 
-func (self *sliceParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
-	possible, can_parse_empty = isLRPossible(self.Parser, parsers)
-	if self.Min == 0 {
-		can_parse_empty = true
+func (par *sliceParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
+	possible, canParseEmpty = isLRPossible(par.Parser, parsers)
+	if par.Min == 0 {
+		canParseEmpty = true
 	}
 
 	return
@@ -1065,49 +1066,48 @@ type ptrParser struct {
 	Optional bool
 }
 
-func (self *ptrParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
-	v := reflect.New(value_of.Type().Elem())
-	nl := ctx.parse(v.Elem(), self.Parser, location, err)
+func (par *ptrParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
+	v := reflect.New(valueOf.Type().Elem())
+	nl := ctx.parse(v.Elem(), par.Parser, location, err)
 	if nl < 0 {
-		if self.Optional {
+		if par.Optional {
 			return location
-		} else {
-			return nl
 		}
-	} else {
-		value_of.Set(v)
+		return nl
 	}
+
+	valueOf.Set(v)
 
 	return nl
 }
 
-func (self *ptrParser) WriteValue(out io.Writer, value_of reflect.Value) error {
-	if value_of.IsNil() {
-		if self.Optional {
+func (par *ptrParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
+	if valueOf.IsNil() {
+		if par.Optional {
 			return nil
 		}
 
 		return errors.New("Not optional value is nil")
 	}
 
-	return self.Parser.WriteValue(out, value_of.Elem())
+	return par.Parser.WriteValue(out, valueOf.Elem())
 }
 
-func (self *ptrParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
-	possible, can_parse_empty = isLRPossible(self.Parser, parsers)
+func (par *ptrParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
+	possible, canParseEmpty = isLRPossible(par.Parser, parsers)
 	if possible {
 		return
 	}
 
-	if self.Optional {
-		can_parse_empty = true
+	if par.Optional {
+		canParseEmpty = true
 	}
 
 	return
 }
 
-func (self *ptrParser) IsTerm() bool {
-	return self.Parser.IsTerm()
+func (par *ptrParser) IsTerm() bool {
+	return par.Parser.IsTerm()
 }
 
 // Parser
@@ -1116,15 +1116,15 @@ type parserParser struct {
 	ptr bool
 }
 
-func (self *parserParser) ParseValue(ctx *parseContext, value_of reflect.Value, location int, err *Error) int {
+func (par *parserParser) ParseValue(ctx *parseContext, valueOf reflect.Value, location int, err *Error) int {
 	var v Parser
-	if self.ptr {
-		v = value_of.Addr().Interface().(Parser)
+	if par.ptr {
+		v = valueOf.Addr().Interface().(Parser)
 	} else {
-		if value_of.Kind() == reflect.Ptr {
-			value_of = reflect.New(value_of.Type().Elem())
+		if valueOf.Kind() == reflect.Ptr {
+			valueOf = reflect.New(valueOf.Type().Elem())
 		}
-		v = value_of.Interface().(Parser)
+		v = valueOf.Interface().(Parser)
 	}
 
 	l, e := v.ParseValue(ctx.str, location)
@@ -1149,27 +1149,27 @@ func (self *parserParser) ParseValue(ctx *parseContext, value_of reflect.Value, 
 	return location
 }
 
-var emptyValueError = errors.New("Trying to out nil value")
+var errEmptyValue = errors.New("Trying to out nil value")
 
-func (self *parserParser) WriteValue(out io.Writer, value_of reflect.Value) error {
+func (par *parserParser) WriteValue(out io.Writer, valueOf reflect.Value) error {
 	var v Parser
-	if self.ptr {
-		v = value_of.Addr().Interface().(Parser)
+	if par.ptr {
+		v = valueOf.Addr().Interface().(Parser)
 	} else {
-		v = value_of.Interface().(Parser)
+		v = valueOf.Interface().(Parser)
 	}
 
-	if value_of.Kind() == reflect.Ptr && value_of.IsNil() {
-		return emptyValueError
+	if valueOf.Kind() == reflect.Ptr && valueOf.IsNil() {
+		return errEmptyValue
 	}
 
 	return v.WriteValue(out)
 }
 
-func (self *parserParser) IsLRPossible(parsers []parser) (possible bool, can_parse_empty bool) {
+func (par *parserParser) IsLRPossible(parsers []parser) (possible bool, canParseEmpty bool) {
 	return false, true // We will think bad way
 }
 
-func (self *parserParser) IsTerm() bool {
+func (par *parserParser) IsTerm() bool {
 	return false // Actually it is not applicable property
 }
