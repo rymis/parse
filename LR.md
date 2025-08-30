@@ -63,7 +63,7 @@ hard as looks at first.
 
 Recursion could be simply detected if we are using memoization. Let's declare hash table L (historically it is named L)
 with key (RULE, LOCATION). Before we started to parse rule r we will add value (true, ...) to memoization table and
-after parsing we will delete it or put (false, ...) into. In second variant we will have packrat table for ower parser
+after parsing we will delete it or put (false, ...) into. In second variant we will have packrat table for our parser
 but large memory footprint.
 
 So when before call X(location) we will search (X, location) in memoization table. If it was found we will assume that
@@ -110,7 +110,7 @@ Now we must know when to make recursive call and when to stop. Let's parse strin
 
 So parser will parse only first '1' but not '-'. So if we are growing recursion level we will see shorter results or
 errors. It gives us the way to determine when last recursion level is reached. But we must not call all the levels of
-recursion in the same time. Let ower functions take second argument: recursion level. Look into the process:
+recursion in the same time. Let our functions take second argument: recursion level. Look into the process:
 	X(0, 0) {
 		return fail
 	}
@@ -158,5 +158,5 @@ over the recursion level and return previous value in recursive calls.
 
 But here is another problem. When we will call E(0, 0) second time it will be detected as recursive. So what will going on?
 The parser will try to call E recursive with recursion level set. And it will try to call X(0, 0) again and it will find that
-X is also recursive and et.cetera. But if we are using memoization of the previous result threre must not be recursive calls
+X is also recursive and et.cetera. But if we are using memoization of the previous result there must not be recursive calls
 in the same recursion path.
