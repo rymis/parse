@@ -1,6 +1,8 @@
 parse is Go implementation of PEG parser.
 =========================================
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/rymis/parse.svg)](https://pkg.go.dev/github.com/rymis/parse)
+
 This is simple Go parser that uses mapping from Go types to PEG language definitions.
 
 Simple example:
